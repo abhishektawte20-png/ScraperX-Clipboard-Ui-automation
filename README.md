@@ -25,8 +25,12 @@ The related [Conference ScraperX Field Assistant](https://github.com/abhishektaw
 
 1. Open the company's Business Entity record in RTS, then click the toolbar icon. Company name and website prefill automatically if the identity lock can read them; otherwise enter them manually.
 2. Click **Copy prompt**, then **Open Rovo** and run the prompt there.
-3. Paste the JSON response back into the panel, click **Validate JSON**, then **Build execution plan** to see what would happen to each proposed field.
-4. Click **Apply pending actions** — applies the four ready fields (see below); everything else reports as skipped with a reason (not yet implemented — see `docs/evidence-checklist.md`).
+3. Paste the JSON response back into the panel and click **Validate JSON** — the preview builds automatically on success.
+4. Review the preview table: each row is a proposed field with its RTS area, current status, and an **editable proposed value** (fix a small mistake directly in the cell — it's re-validated when you publish). Uncheck anything you don't want touched, or **Select all pending**.
+5. Click **Publish selected to RTS** — you'll be asked to confirm before anything is written. The identity lock runs first and blocks the whole batch on any mismatch.
+6. **Clear cache for this profile** removes the saved plan for the currently open company from `chrome.storage.local` at any time.
+
+Every build of the preview is saved to a profile-scoped cache automatically (keyed by PBID/domain), so reopening the assistant on the same record shows a "cached plan found" notice — this only remembers which fields were proposed and their outcome, never raw research text.
 
 ## Repository layout
 
@@ -61,6 +65,7 @@ tests/
   test-identity-lock.mjs           # jsdom suite for RTS identity reading
   test-business-entity-general.mjs  # jsdom suite for the shared-save-group workflow
   test-company-sic.mjs              # jsdom suite for the SIC workflow
+  test-panel-smoke.mjs              # mounts the real panel UI and exercises validate/preview/publish-guard
 fixtures/
 docs/
   stage1-assessment.md
