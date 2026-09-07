@@ -41,8 +41,11 @@
   // not a full https URL, so this accepts either form.
   function isWebsiteAddressValue(value) {
     if (typeof value !== "string" || !value.trim()) return false;
-    if (isHttpsUrl(value)) return true;
-    return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(value.trim());
+    const trimmed = value.trim();
+    if (isHttpsUrl(trimmed)) return true;
+    // Tolerates a bare host with an optional single trailing slash
+    // (e.g. "example.com/"), a common harmless variant.
+    return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\/?$/i.test(trimmed);
   }
 
   function isValidDate(value) {

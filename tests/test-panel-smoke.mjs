@@ -126,3 +126,10 @@ test("clear cache button does not throw when no cache exists yet", async () => {
   const clearButton = Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Clear cache for this profile");
   assert.doesNotThrow(() => clearButton.click());
 });
+
+test("copy agent setup instructions button exists and does not throw without a clipboard API", () => {
+  const { shadow } = setupDom();
+  const button = Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Copy agent setup instructions");
+  assert.ok(button);
+  assert.doesNotThrow(() => button.click());
+});

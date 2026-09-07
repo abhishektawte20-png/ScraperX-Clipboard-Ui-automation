@@ -211,7 +211,9 @@
 
     const copyPromptButton = element("button", { className: "btn", text: "Copy prompt", type: "button" });
     const openRovoButton = element("button", { className: "btn secondary", text: "Open Rovo", type: "button" });
-    identityCard.appendChild(element("div", { className: "buttons" }, [copyPromptButton, openRovoButton]));
+    const copyAgentSetupButton = element("button", { className: "btn secondary", text: "Copy agent setup instructions", type: "button", title: "One-time setup: paste this into the ScraperX Rovo agent's own configuration, not into a chat message." });
+    identityCard.appendChild(element("div", { className: "buttons" }, [copyPromptButton, openRovoButton, copyAgentSetupButton]));
+    identityCard.appendChild(element("p", { className: "helptext", text: "If Rovo keeps replying with a prose report instead of JSON, the agent's own configuration needs the \"agent setup instructions\" pasted in once (see docs/rovo-agent-instructions.md) — a per-run prompt alone can't override it." }));
     body.appendChild(identityCard);
 
     // ---------- Card 2: paste + validate ----------
@@ -287,6 +289,16 @@
     openRovoButton.addEventListener("click", () => {
       window.open("https://pitchbook.atlassian.net/", "_blank", "noopener,noreferrer");
       setStep(1);
+    });
+
+    copyAgentSetupButton.addEventListener("click", async () => {
+      const instructions = globalThis.SXRTS.promptBuilder.buildAgentInstructions();
+      try {
+        await navigator.clipboard.writeText(instructions);
+        setStatus(validateStatus, "Agent setup instructions copied. Paste them into the ScraperX agent's own configuration in Rovo (one-time setup) — not into a chat message.", "success");
+      } catch {
+        setStatus(validateStatus, "Copy was blocked by the browser. Open docs/rovo-agent-instructions.md instead.", "error");
+      }
     });
 
     function renderActionRow(action) {

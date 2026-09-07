@@ -13,6 +13,14 @@
  * wired-up workflow yet (e.g. company.sites) are still requested here
  * so the research only has to happen once; the panel reports them as
  * preview-only until their workflow lands.
+ *
+ * buildPrompt() is the per-run message. buildAgentInstructions() is the
+ * SAME rules/shape/catalogs, framed as durable instructions meant to be
+ * pasted into the Rovo custom agent's own configuration (not sent as a
+ * one-off message) — see docs/rovo-agent-instructions.md and its header
+ * comment for why this had to exist as a separate thing: a per-run
+ * message alone was not enough to override the agent's own baked-in
+ * prose report format.
  */
 (() => {
   function catalogLabels(jsonPath, formKey) {
@@ -20,7 +28,7 @@
     return entry?.form?.[formKey]?.options?.map((option) => option.label) ?? [];
   }
 
-  function buildPrompt({ companyName, domain } = {}) {
+  function buildRulesAndShape() {
     const nameTypeOptions = catalogLabels("businessEntity.nameVariations", "typeDropdown");
     const emailStructureOptions = catalogLabels("businessEntity.emailDefaultStructure", "select");
     const sicSourceOptions = catalogLabels("company.sicCodes", "sourceDropdown");
@@ -88,11 +96,8 @@
     };
 
     return [
-      "Research this company using the ScraperX process.",
-      `Company name: ${companyName || ""}`,
-      `Official website: ${domain || ""}`,
-      "",
-      "Return exactly one valid JSON object and no Markdown, commentary, or code fences. Do not wrap any URL, domain, or value in markdown link syntax like \"[text](url)\" — return plain, unformatted text and URLs only.",
+      "Return exactly one valid JSON object and NOTHING else: no Markdown, no commentary, no section headers, no bullet points, no code fences. The entire response body must be parseable directly as JSON — if you find yourself writing a heading like \"SECTION 1\" or a bullet list, stop and convert it into the JSON shape below instead.",
+      "Do not wrap any URL, domain, or value in markdown link syntax like \"[text](url)\" anywhere in the response — return plain, unformatted text and URLs only.",
       "Use null when a value cannot be verified. Use MM/DD/YYYY for dates.",
       "Every \"source\" field must be a fully qualified HTTPS URL to where you found that specific value, or null — never invent a citation.",
       "Do not invent a Name Type, Email Default Structure, SIC Source, Site Type, Site Status, or Country value that is not in the supported lists below — use null instead. Industries and Verticals are free text for now (not yet catalog-validated) — still be precise and cite a source.",
@@ -117,6 +122,30 @@
     ].join("\n");
   }
 
+  function buildPrompt({ companyName, domain } = {}) {
+    return [
+      "Research this company using the ScraperX process.",
+      `Company name: ${companyName || ""}`,
+      `Official website: ${domain || ""}`,
+      "",
+      buildRulesAndShape()
+    ].join("\n");
+  }
+
+  function buildAgentInstructions() {
+    return [
+      "You are the ScraperX Company Research Agent for PitchBook RTS.",
+      "",
+      "Every time you are asked to research a company, you will be given a company name and an official website in the user's message, in this form:",
+      "Company name: <name>",
+      "Official website: <url>",
+      "",
+      "For every such request, follow the rules below exactly. These rules apply to every response, with no exceptions — including follow-up messages in the same conversation.",
+      "",
+      buildRulesAndShape()
+    ].join("\n");
+  }
+
   globalThis.SXRTS = globalThis.SXRTS || {};
-  globalThis.SXRTS.promptBuilder = { buildPrompt };
+  globalThis.SXRTS.promptBuilder = { buildPrompt, buildAgentInstructions };
 })();

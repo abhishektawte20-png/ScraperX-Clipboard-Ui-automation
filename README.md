@@ -23,6 +23,7 @@ The related [Conference ScraperX Field Assistant](https://github.com/abhishektaw
 
 ## Researcher workflow (current)
 
+0. **One-time setup**: click **Copy agent setup instructions** and paste them into the ScraperX Rovo agent's own configuration (not into a chat message) — see `docs/rovo-agent-instructions.md` for why. A per-run prompt alone was not enough to stop the agent from replying with a prose report instead of JSON.
 1. Open the company's Business Entity record in RTS, then click the toolbar icon. Company name and website prefill automatically if the identity lock can read them; otherwise enter them manually.
 2. Click **Copy prompt**, then **Open Rovo** and run the prompt there.
 3. Paste the JSON response back into the panel and click **Validate JSON** — the preview builds automatically on success.

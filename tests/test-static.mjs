@@ -131,6 +131,11 @@ test("rejects non-HTTPS URL", () => {
   assert.throws(() => schema.validate(bad));
 });
 
+test("accepts a bare domain with a trailing slash", () => {
+  const good = validJson({ businessEntity: { websiteAddresses: [{ value: "aromagrowstore.com/", action: "addIfMissing" }] } });
+  assert.doesNotThrow(() => schema.validate(good));
+});
+
 test("rejects unsupported action value", () => {
   const bad = validJson({ company: { keywords: [{ value: "fintech", action: "forceReplace" }] } });
   assert.throws(() => schema.validate(bad));
@@ -300,6 +305,16 @@ test("prompt includes the company name and website", () => {
   const prompt = promptBuilder.buildPrompt({ companyName: "Psypher", domain: "www.psypher.in" });
   assert.match(prompt, /Company name: Psypher/);
   assert.match(prompt, /Official website: www\.psypher\.in/);
+});
+
+test("agent instructions carry the same shape/rules/catalogs but no company-specific line, and forbid prose", () => {
+  const instructions = promptBuilder.buildAgentInstructions();
+  assert.match(instructions, /Company name: <name>/); // a placeholder, not a real value baked in
+  assert.match(instructions, /no section headers, no bullet points/);
+  assert.match(instructions, /"schemaVersion": "1\.0"/);
+  for (const label of ["Familiar Name", "Morningstar", "Primary HQ", "United States"]) {
+    assert.ok(instructions.includes(label), `agent instructions should include "${label}"`);
+  }
 });
 
 test("prompt lists every evidenced Name Type, Email Default Structure, and SIC Source option", () => {
