@@ -22,7 +22,7 @@ Evidence should be provided as raw outer HTML (copy from DevTools: right-click e
 | Name variations (Add New Name Variation, Type dropdown, Save, verify) | **Ready** | `registry/businessEntity.nameVariations.js`, `core/workflows/businessEntityNameVariations.js`. Evidenced from Protocol DMC Spain (PBID 862926-85): native `<select class="businessEntityNameType">` with 9 exact options, `#addNameVariation`, `#saveBusinessEntityNameVariation` (scoped — distinct from the Entity section's own unrelated Save button), and the post-save `savedNameVariation` class + `data-defaultvalue` match used for read-back verification. "View All Name Variations" toggle selector still unconfirmed (text-fallback only). |
 | Formal / Familiar / Former / Legal name, start date | Missing | |
 | Parent / Spun Out Of lookups | Missing | |
-| Entity ID / PBID (read-only, for identity lock) | Partial | We have the visible value (`PBID: 862926-85`, top of page, next to a copy icon) and the URL pattern `https://rts.pitchbook.com/ext/{pbid}/BE/{sectionId}`, but not the outerHTML of the PBID/company-name header element itself. Still blocks `identityLock.readRtsIdentityFromPage()` — applying any field is blocked until this is evidenced, since the identity lock runs before every apply regardless of which field. **This is the next highest-value piece of evidence** — it unblocks real application for name variations immediately. |
+| Entity ID / PBID (read-only, for identity lock) | **Ready** (PBID + domain; Entity ID still missing) | `identityLock.readRtsIdentityFromPage()` reads PBID from a `flat-button__caption`-prefixed span (hash-suffix tolerant), formal name from `input[name="formalNameVariations"]`, and domain from `#domainValue` with `#webURL`-derived fallback. Entity ID has no selector evidence yet but is not required for the lock to function (PBID/domain suffice). Applying name variations now works end to end once identity matches. |
 | EIN / FEIN | Missing | |
 | Entity Registration area | Missing | |
 | CRD area | Missing | |
@@ -31,7 +31,7 @@ Evidence should be provided as raw outer HTML (copy from DevTools: right-click e
 | Entity Type control | Missing | Need exact selection behavior. |
 | Primary Entity dropdown | Missing | |
 | Company Financing Status dropdown | Missing | |
-| Website Address / Domain info | Missing | Recommended second field per Stage 3 plan. |
+| Website Address / Domain info | Read-only so far | `#webURL` and `#domainValue` selectors are known and used for identity-lock reading. Writing/saving these fields (Save button scope, verification signal) is still unevidenced — recommended second field to fully evidence per Stage 3 plan. |
 | Research Notes | Missing | Recommended third field per Stage 3 plan. |
 | Firm Logo | Missing | |
 | Social Media Identifier table + Add form | Missing | Need Social Media Network dropdown options. |

@@ -4,9 +4,8 @@
  * Panel: paste JSON, validate it, preview the execution plan, and apply
  * pending actions for fields whose workflow is wired up (currently only
  * businessEntity.nameVariations). Applying always runs the profile
- * identity lock first; since reading PBID/domain from the live RTS page
- * is not evidenced yet, every apply attempt currently blocks there with a
- * clear message rather than proceeding without an identity check.
+ * identity lock first and blocks with a clear message on any mismatch or
+ * insufficient identifiers, per the project's identity-lock requirement.
  */
 (() => {
   function element(tag, options = {}, children = []) {
@@ -54,7 +53,7 @@
     ]));
 
     const body = element("div", { className: "body" });
-    body.appendChild(element("p", { className: "notice", text: "Business Entity > Name Variations is wired up. Applying still requires the profile identity lock, which is blocked until RTS PBID/domain reading is evidenced — see docs/evidence-checklist.md. All other fields remain preview-only." }));
+    body.appendChild(element("p", { className: "notice", text: "Business Entity > Name Variations is fully wired up, including the profile identity lock. All other fields remain preview-only until their DOM is evidenced — see docs/evidence-checklist.md." }));
 
     const label = element("label", { text: "Paste ScraperX Rovo JSON response" });
     const textarea = element("textarea", { placeholder: "Paste one JSON object here." });

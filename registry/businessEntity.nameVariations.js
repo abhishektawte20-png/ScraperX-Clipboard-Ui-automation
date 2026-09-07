@@ -14,6 +14,11 @@
  *   "savedNameVariation" and its data-defaultvalue is updated to match
  *   value — that pairing is the saved-value verification signal.
  *
+ * The primary Formal Name field (input[name="formalNameVariations"]) also
+ * carries the class "businessEntityName" (plus "businessEntityNameMain"),
+ * so the row selector below explicitly excludes it — otherwise it would
+ * be misread as a variation row and could be overwritten.
+ *
  * Not yet evidenced: the exact selector for the "View All Name
  * Variations" expand toggle, so ensureExpanded() falls back to its exact
  * visible text if the row inputs aren't already present in the DOM.
@@ -43,7 +48,7 @@
     },
     addButton: { candidates: ["#addNameVariation"] },
     form: {
-      nameInput: { candidates: [".businessEntityName"] },
+      nameInput: { candidates: [".businessEntityName:not(.businessEntityNameMain)"] },
       typeDropdown: { candidates: [".businessEntityNameType"], options: TYPE_OPTIONS }
     },
     saveButton: { scopedTo: "Entity > Name Variations", candidates: ["#saveBusinessEntityNameVariation"] },

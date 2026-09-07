@@ -1,12 +1,12 @@
 // Static, browser-free tests for the foundation layer (schema, identity
-// lock, cache, state machine, execution plan, duplicate detection) plus
-// manifest/CSP checks.
+// comparison, cache, state machine, execution plan, duplicate detection)
+// plus manifest/CSP checks.
 //
-// NOT covered here (needs a real RTS DOM, which has not been evidenced
-// yet): field adapters against live controls, section-scoped Save,
-// save/verification failure, and resume-after-interruption end to end.
-// Those get fixture- or browser-based tests once each field's DOM
-// evidence lands (see docs/evidence-checklist.md).
+// DOM-dependent behavior lives in separate jsdom-based test files:
+// identityLock.readRtsIdentityFromPage() -> test-identity-lock.mjs,
+// the Name Variations workflow -> test-name-variations.mjs. Everything
+// else that still needs a real RTS DOM stays untested until evidenced
+// (see docs/evidence-checklist.md).
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -134,10 +134,6 @@ test("identity mismatch when pbId disagrees", () => {
 test("identity insufficient when no strong identifier overlaps", () => {
   const result = identityLock.compareIdentity({ companyName: "Psypher" }, {});
   assert.equal(result.status, "insufficient");
-});
-
-test("readRtsIdentityFromPage refuses to guess", () => {
-  assert.throws(() => identityLock.readRtsIdentityFromPage(), identityLock.NotEvidencedError);
 });
 
 // ---- Duplicate detection ----

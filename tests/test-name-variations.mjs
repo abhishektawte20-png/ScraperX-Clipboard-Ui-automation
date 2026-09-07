@@ -92,6 +92,19 @@ test("accepts the internal option code as well as the display label", async () =
   assert.equal(result.type, "Legal Name");
 });
 
+test("never reads or overwrites the primary Formal Name field as a variation row", async () => {
+  setupDom();
+  const existing = globalThis.SXRTS.workflows.businessEntityNameVariations.readExistingRecords(
+    globalThis.SXRTS.registry.getField("businessEntity.nameVariations")
+  );
+  assert.equal(existing.length, 2); // not 3 — the main field is excluded
+  assert.ok(!existing.some((record) => record.nameInput.name === "formalNameVariations"));
+
+  await globalThis.SXRTS.workflows.businessEntityNameVariations.applyNameVariation({ name: "Some Other Name", type: "Other Name" });
+  const mainField = document.querySelector('input[name="formalNameVariations"]');
+  assert.equal(mainField.value, "Protocol DMC Spain"); // untouched
+});
+
 test("skips a duplicate (same normalized name + type) without touching the DOM", async () => {
   setupDom();
   const result = await globalThis.SXRTS.workflows.businessEntityNameVariations.applyNameVariation({
@@ -100,7 +113,7 @@ test("skips a duplicate (same normalized name + type) without touching the DOM",
   });
   assert.equal(result.status, "skipped");
   assert.equal(result.reason, "duplicate");
-  assert.equal(document.querySelectorAll(".businessEntityName").length, 2);
+  assert.equal(document.querySelectorAll(".businessEntityName").length, 3); // main field + 2 rows, unchanged
 });
 
 test("rejects a Type value that is not in the evidenced catalog", async () => {

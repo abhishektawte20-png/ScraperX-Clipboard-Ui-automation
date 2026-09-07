@@ -2,11 +2,20 @@
 
 /*
  * Profile identity lock. compareIdentity() is a pure function and is fully
- * testable without a browser. readRtsIdentityFromPage() is a stub: reading
- * PBID / Entity ID / domain / company name from a live RTS Business Entity
- * page requires selector evidence that has not been supplied yet (see
- * docs/evidence-checklist.md). It throws NotEvidencedError rather than
- * guessing a selector, per the project's accuracy requirements.
+ * testable without a browser.
+ *
+ * readRtsIdentityFromPage() is evidenced from a live Protocol DMC Spain
+ * record (PBID 862926-85):
+ * - PBID: a <span class="flat-button__caption-<hash>"> containing the text
+ *   "PBID: <value>". The trailing class segment looks like a generated
+ *   CSS-module hash and is not assumed stable, so this matches on the
+ *   stable "flat-button__caption" prefix plus the "PBID:" text pattern,
+ *   not the full class name.
+ * - Formal name: input[name="formalNameVariations"].
+ * - Domain: #domainValue (often blank).
+ * - Website Address: #webURL, used as a fallback to derive a domain when
+ *   #domainValue is blank. Falls back to Entity ID being unavailable
+ *   (no selector evidence for it yet).
  */
 (() => {
   class NotEvidencedError extends Error {
@@ -71,11 +80,59 @@
     return { status: reasons.length ? "match-with-warnings" : "match", reasons };
   }
 
+  function readPbid() {
+    const candidates = document.querySelectorAll('[class*="flat-button__caption"]');
+    for (const el of candidates) {
+      const match = el.textContent.trim().match(/^PBID:\s*(.+)$/i);
+      if (match) return match[1].trim();
+    }
+    return null;
+  }
+
+  function readFormalName() {
+    return document.querySelector('input[name="formalNameVariations"]')?.value?.trim() || null;
+  }
+
+  function readDomainField() {
+    return document.querySelector("#domainValue")?.value?.trim() || null;
+  }
+
+  function readWebsiteUrl() {
+    return document.querySelector("#webURL")?.value?.trim() || null;
+  }
+
+  // Defends against a value copied through a tool that markdown-linkified
+  // a bare URL (e.g. "[www.x.com](https://www.x.com)") in addition to a
+  // plain URL/host string.
+  function domainFromRawValue(value) {
+    if (!value) return null;
+    const markdownLink = value.match(/^\[(.*?)\]\((.*?)\)$/);
+    const candidate = markdownLink ? markdownLink[2] || markdownLink[1] : value;
+    try {
+      const url = new URL(/^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`);
+      return normalizeDomain(url.hostname);
+    } catch {
+      return normalizeDomain(candidate);
+    }
+  }
+
   function readRtsIdentityFromPage() {
-    throw new NotEvidencedError(
-      "Reading PBID, Entity ID, domain, and company name from the live RTS Business Entity page is not implemented: " +
-      "no DOM evidence for the Entity Overview / Identifiers section has been supplied yet."
-    );
+    const pbId = readPbid();
+    const formalName = readFormalName();
+    const domain = normalizeDomain(readDomainField()) || domainFromRawValue(readWebsiteUrl());
+
+    if (!pbId && !domain && !formalName) {
+      throw new Error("No RTS Business Entity identity fields (PBID, domain, formal name) were found on this page. Is a Business Entity record open?");
+    }
+
+    return {
+      pbId,
+      entityId: null, // no selector evidence yet
+      companyName: formalName,
+      formalName,
+      domain,
+      sourceRtsUrl: globalThis.location?.href ?? null
+    };
   }
 
   globalThis.SXRTS = globalThis.SXRTS || {};
