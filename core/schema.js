@@ -37,6 +37,14 @@
     }
   }
 
+  // RTS's "Website Address" field stores a bare host (e.g. "www.dmcspain.com"),
+  // not a full https URL, so this accepts either form.
+  function isWebsiteAddressValue(value) {
+    if (typeof value !== "string" || !value.trim()) return false;
+    if (isHttpsUrl(value)) return true;
+    return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(value.trim());
+  }
+
   function isValidDate(value) {
     return typeof value === "string" && DATE_RE.test(value);
   }
@@ -265,8 +273,10 @@
       });
     }
     if ("websiteAddresses" in value) {
+      // RTS has exactly one Website Address field; the workflow uses the
+      // first array entry and reports a warning for any additional ones.
       safe.websiteAddresses = checkRecordArray(value.websiteAddresses, "businessEntity.websiteAddresses", errors, {
-        value: { test: isHttpsUrl, message: "must be a valid HTTPS URL." },
+        value: { test: isWebsiteAddressValue, message: "must be a valid URL or bare domain (e.g. www.example.com)." },
         action: { test: isValidAction, message: "must be a supported action." },
         source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false },
         confidence: { test: isValidConfidence, message: "must be high, medium, low, or null.", required: false }
