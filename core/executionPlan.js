@@ -17,6 +17,7 @@
     { jsonPath: "company.briefDescription", kind: "envelope", get: (d) => d.company?.briefDescription },
     { jsonPath: "company.fullDescription", kind: "envelope", get: (d) => d.company?.fullDescription },
     { jsonPath: "company.keywords", kind: "array", get: (d) => d.company?.keywords },
+    { jsonPath: "company.searchKeywords", kind: "envelope", get: (d) => d.company?.searchKeywords },
     { jsonPath: "company.industries", kind: "array", get: (d) => d.company?.industries },
     { jsonPath: "company.verticals", kind: "array", get: (d) => d.company?.verticals },
     { jsonPath: "company.employeeHistory", kind: "array", get: (d) => d.company?.employeeHistory },

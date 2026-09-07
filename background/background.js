@@ -11,10 +11,12 @@ const ASSISTANT_FILES = [
   "core/adapters/contentEditable.js",
   "registry/businessEntity.nameVariations.js",
   "registry/businessEntity.general.js",
+  "registry/company.sic.js",
   "registry/index.js",
   "core/executionPlan.js",
   "core/workflows/businessEntityNameVariations.js",
   "core/workflows/businessEntityGeneral.js",
+  "core/workflows/companySic.js",
   "content/panel.js",
   "content/bootstrap.js"
 ];

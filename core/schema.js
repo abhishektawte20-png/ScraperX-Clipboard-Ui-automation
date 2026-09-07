@@ -183,6 +183,16 @@
     action: { test: isValidAction, message: "must be a supported action." }
   };
 
+  const SIC_CLASSIFICATION_SOURCES = new Set(["Morningstar", "PitchBook", "SEC"]);
+  // Distinct from the generic "source" (provenance URL) already on every
+  // record: this is RTS's own SIC "Source" dropdown (who classified it).
+  const sicCodeFields = {
+    code: { test: (v) => typeof v === "string" && v.trim().length > 0, message: "must be a non-empty string." },
+    classificationSource: { test: (v) => v === null || SIC_CLASSIFICATION_SOURCES.has(v), message: "must be Morningstar, PitchBook, SEC, or null.", required: false },
+    action: { test: isValidAction, message: "must be a supported action." },
+    source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false }
+  };
+
   const siteFields = {
     siteType: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     address1: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
@@ -299,7 +309,7 @@
     }
     const safe = {};
     const known = new Set([
-      "startDate", "briefDescription", "fullDescription", "keywords", "industries", "verticals",
+      "startDate", "briefDescription", "fullDescription", "keywords", "searchKeywords", "industries", "verticals",
       "employeeHistory", "sicCodes", "naicsCodes", "sites", "management"
     ]);
     for (const key of Object.keys(value)) {
@@ -317,6 +327,10 @@
     if ("keywords" in value) {
       safe.keywords = checkRecordArray(value.keywords, "company.keywords", errors, keywordFields);
     }
+    if ("searchKeywords" in value) {
+      // A single free-text field in RTS, not a repeatable tag list like keywords.
+      safe.searchKeywords = checkEnvelope(value.searchKeywords, "company.searchKeywords", errors, { valueCheck: isNullableString, valueLabel: "a string or null" });
+    }
     if ("industries" in value) {
       safe.industries = checkRecordArray(value.industries, "company.industries", errors, industryFields);
     }
@@ -327,7 +341,7 @@
       safe.employeeHistory = checkRecordArray(value.employeeHistory, "company.employeeHistory", errors, employeeHistoryFields);
     }
     if ("sicCodes" in value) {
-      safe.sicCodes = checkRecordArray(value.sicCodes, "company.sicCodes", errors, codeFields);
+      safe.sicCodes = checkRecordArray(value.sicCodes, "company.sicCodes", errors, sicCodeFields);
     }
     if ("naicsCodes" in value) {
       safe.naicsCodes = checkRecordArray(value.naicsCodes, "company.naicsCodes", errors, codeFields);

@@ -2,7 +2,7 @@
 
 A Chrome/Edge Manifest V3 extension that maps structured JSON from a ScraperX Rovo research agent into PitchBook RTS Business Entity and Company fields, with profile identity locking, preview/conflict review, and profile-scoped caching.
 
-**Current status.** `businessEntity.nameVariations` (Add New Name Variation, Type dropdown, scoped Save, saved-value verification) is fully evidenced, implemented, and unblocked by a working identity lock (reads PBID/domain/formal name from the live RTS page). Website Address, Email Default Structure, and Research Notes (Business Entity level) are implemented and tested but held at `evidenceStatus: "in-review"` — they share one Save button whose "saved successfully" signal is inferred, not directly confirmed (see `docs/evidence-checklist.md`); one quick manual check flips them to `"ready"`. Everything else is still preview-only. Management is explicitly out of scope per a project decision (duplicate-detection risk), and Industries raises an open architecture question (its Add/Edit popup opens in a separate browser window) — both documented in the checklist.
+**Current status.** `businessEntity.nameVariations` (Add New Name Variation, Type dropdown, scoped Save, saved-value verification) is fully evidenced, implemented, and unblocked by a working identity lock (reads PBID/domain/formal name from the live RTS page). Website Address, Email Default Structure, Research Notes (Business Entity level), and Company SIC records are implemented and tested but held at `evidenceStatus: "in-review"` — each has a Save button whose "saved successfully" signal is inferred, not directly confirmed (see `docs/evidence-checklist.md`); one quick manual check per group flips it to `"ready"`. Everything else is still preview-only. Management is out of scope by explicit decision (duplicate-detection risk). Industries and Verticals both open their Add/Edit UI in a separate browser window; by decision, this stays a manual step (researcher re-clicks the toolbar icon in that window) rather than requesting a broader `tabs`/`windows` permission.
 
 The related [Conference ScraperX Field Assistant](https://github.com/abhishektawte20-png/scraperxsa123) is the architectural reference for this project and is not modified by this repo.
 
@@ -40,16 +40,19 @@ core/
   workflows/
     businessEntityNameVariations.js     # ready
     businessEntityGeneral.js             # in-review (Website Address, Email Default Structure, Research Notes)
+    companySic.js                         # in-review
 registry/
   index.js                        # aggregates per-field registry files
   businessEntity.nameVariations.js  # ready
   businessEntity.general.js          # in-review
+  company.sic.js                      # in-review
 content/panel.js, bootstrap.js   # shadow-DOM UI
 tests/
   test-static.mjs                 # pure-logic suite (schema, cache, state machine, execution plan)
   test-name-variations.mjs        # jsdom suite for the name-variations workflow
   test-identity-lock.mjs           # jsdom suite for RTS identity reading
   test-business-entity-general.mjs  # jsdom suite for the shared-save-group workflow
+  test-company-sic.mjs              # jsdom suite for the SIC workflow
 fixtures/
 docs/
   stage1-assessment.md
