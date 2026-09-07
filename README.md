@@ -21,6 +21,13 @@ The related [Conference ScraperX Field Assistant](https://github.com/abhishektaw
 3. **Load unpacked** → select this folder.
 4. Pin **ScraperX RTS Profile Assistant** to the toolbar.
 
+## Researcher workflow (current)
+
+1. Open the company's Business Entity record in RTS, then click the toolbar icon. Company name and website prefill automatically if the identity lock can read them; otherwise enter them manually.
+2. Click **Copy prompt**, then **Open Rovo** and run the prompt there.
+3. Paste the JSON response back into the panel, click **Validate JSON**, then **Build execution plan** to see what would happen to each proposed field.
+4. Click **Apply pending actions** — right now this only actually applies `businessEntity.nameVariations`; everything else reports as skipped with a reason (in-review or not yet implemented — see `docs/evidence-checklist.md`).
+
 ## Repository layout
 
 ```
@@ -32,6 +39,7 @@ core/
   duplicates.js                  # generic normalized-match duplicate detector
   cache.js                        # profile-scoped chrome.storage.local cache
   stateMachine.js                  # pending -> ... -> savedValueVerified
+  promptBuilder.js                  # builds the Rovo research prompt from the registry's own catalogs
   executionPlan.js                  # validated JSON + registry -> action list
   adapters/
     textField.js                    # native-setter text/textarea adapter

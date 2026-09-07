@@ -23,10 +23,13 @@ import "../core/duplicates.js";
 import "../core/cache.js";
 import "../core/stateMachine.js";
 import "../registry/businessEntity.nameVariations.js";
+import "../registry/businessEntity.general.js";
+import "../registry/company.sic.js";
 import "../registry/index.js";
+import "../core/promptBuilder.js";
 import "../core/executionPlan.js";
 
-const { schema, identityLock, duplicates, cache, stateMachine, registry, executionPlan } = globalThis.SXRTS;
+const { schema, identityLock, duplicates, cache, stateMachine, registry, executionPlan, promptBuilder } = globalThis.SXRTS;
 
 function validJson(overrides = {}) {
   return JSON.stringify({
@@ -237,19 +240,20 @@ test("businessEntity.nameVariations is evidenced and ready", () => {
 });
 
 test("skips fields registered but not yet evidenced", () => {
-  // Register a throwaway "missing" entry so this test doesn't depend on
-  // which real fields happen to be evidenced yet.
+  // Register a throwaway "missing" entry under a jsonPath no real
+  // registry file uses, so this test doesn't depend on — or collide
+  // with — which real fields happen to be evidenced.
   globalThis.SXRTS.registryEntries.push({
-    key: "businessEntity.websiteAddresses",
-    area: "Business Entity",
+    key: "company.employeeHistory",
+    area: "Company",
     evidenceStatus: "missing",
     saveButton: {}
   });
   const validated = schema.validate(validJson({
-    businessEntity: { websiteAddresses: [{ value: "https://psypher.in", action: "addIfMissing" }] }
+    company: { employeeHistory: [{ count: 10, action: "addIfMissing" }] }
   }));
   const actions = executionPlan.buildExecutionPlan(validated);
-  const action = actions.find((a) => a.jsonPath === "businessEntity.websiteAddresses");
+  const action = actions.find((a) => a.jsonPath === "company.employeeHistory");
   assert.equal(action.executionStatus, "skipped");
   assert.match(action.skipReason, /marked "missing"/);
 });
@@ -274,4 +278,39 @@ test("does not build an action for an unset envelope value", () => {
   const validated = schema.validate(validJson({ company: { startDate: { value: null, action: "updateIfBlank" } } }));
   const actions = executionPlan.buildExecutionPlan(validated);
   assert.equal(actions.some((a) => a.jsonPath === "company.startDate"), false);
+});
+
+// ---- Prompt builder ----
+
+test("prompt includes the company name and website", () => {
+  const prompt = promptBuilder.buildPrompt({ companyName: "Psypher", domain: "www.psypher.in" });
+  assert.match(prompt, /Company name: Psypher/);
+  assert.match(prompt, /Official website: www\.psypher\.in/);
+});
+
+test("prompt lists every evidenced Name Type, Email Default Structure, and SIC Source option", () => {
+  const prompt = promptBuilder.buildPrompt({});
+  for (const label of registry.getField("businessEntity.nameVariations").form.typeDropdown.options.map((o) => o.label)) {
+    assert.ok(prompt.includes(label), `missing Name Type "${label}"`);
+  }
+  assert.equal((registry.getField("businessEntity.emailDefaultStructure").form.select.options.map((o) => o.label))
+    .filter((label) => !prompt.includes(label)).length, 0);
+  for (const label of ["Morningstar", "PitchBook", "SEC"]) {
+    assert.ok(prompt.includes(label), `missing SIC Source "${label}"`);
+  }
+});
+
+test("prompt output is itself accepted by the schema validator once wrapped in real values", () => {
+  const sample = JSON.stringify({
+    schemaVersion: "1.0",
+    profileIdentity: { companyName: "Psypher", pbId: null, entityId: null, domain: "psypher.in" },
+    businessEntity: {
+      nameVariations: [{ name: "Psypher Inc", type: "Legal Name", action: "addIfMissing", source: "https://psypher.in/about", sourceDate: null, confidence: "high" }],
+      emailDefaultStructure: { value: "FirstName@domain.com", action: "addIfMissing", source: null, confidence: "medium" }
+    },
+    company: {
+      sicCodes: [{ code: "7372", classificationSource: "PitchBook", action: "addIfMissing", source: null }]
+    }
+  });
+  assert.doesNotThrow(() => schema.validate(sample));
 });

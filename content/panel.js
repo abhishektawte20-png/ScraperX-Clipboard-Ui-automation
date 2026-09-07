@@ -55,6 +55,60 @@
     const body = element("div", { className: "body" });
     body.appendChild(element("p", { className: "notice", text: "Business Entity > Name Variations is fully wired up, including the profile identity lock. All other fields remain preview-only until their DOM is evidenced — see docs/evidence-checklist.md." }));
 
+    let readIdentity = { companyName: "", domain: "" };
+    try {
+      const rts = globalThis.SXRTS.identityLock.readRtsIdentityFromPage();
+      readIdentity = { companyName: rts.companyName || "", domain: rts.domain || "" };
+    } catch {
+      // Not on a recognizable RTS Business Entity page yet; leave fields blank for manual entry.
+    }
+
+    const companyNameInput = element("input", { id: "sxrts-company-name" });
+    companyNameInput.value = readIdentity.companyName;
+    const companyNameLabel = element("label", { text: "Company name" });
+    companyNameLabel.htmlFor = "sxrts-company-name";
+    body.appendChild(element("div", { className: "field" }, [companyNameLabel, companyNameInput]));
+
+    const domainInput = element("input", { id: "sxrts-domain" });
+    domainInput.value = readIdentity.domain;
+    const domainLabel = element("label", { text: "Official website" });
+    domainLabel.htmlFor = "sxrts-domain";
+    body.appendChild(element("div", { className: "field" }, [domainLabel, domainInput]));
+
+    const promptLabel = element("label", { text: "Prompt for ScraperX" });
+    const promptArea = element("textarea", { id: "sxrts-prompt" });
+    promptArea.readOnly = true;
+    body.appendChild(element("div", { className: "field" }, [promptLabel, promptArea]));
+
+    function regeneratePrompt() {
+      promptArea.value = globalThis.SXRTS.promptBuilder.buildPrompt({
+        companyName: companyNameInput.value.trim(),
+        domain: domainInput.value.trim()
+      });
+    }
+    regeneratePrompt();
+    companyNameInput.addEventListener("input", regeneratePrompt);
+    domainInput.addEventListener("input", regeneratePrompt);
+
+    const copyPromptButton = element("button", { text: "Copy prompt", type: "button" });
+    const openRovoButton = element("button", { text: "Open Rovo", type: "button" });
+    body.appendChild(element("div", { className: "buttons" }, [copyPromptButton, openRovoButton]));
+
+    copyPromptButton.addEventListener("click", async () => {
+      regeneratePrompt();
+      try {
+        await navigator.clipboard.writeText(promptArea.value);
+        setStatus("Prompt copied. Paste it into ScraperX in Rovo.", "success");
+      } catch {
+        promptArea.focus();
+        promptArea.select();
+        setStatus("Copy was blocked by the browser. The prompt is selected; press Ctrl+C.", "error");
+      }
+    });
+    openRovoButton.addEventListener("click", () => {
+      window.open("https://pitchbook.atlassian.net/", "_blank", "noopener,noreferrer");
+    });
+
     const label = element("label", { text: "Paste ScraperX Rovo JSON response" });
     const textarea = element("textarea", { placeholder: "Paste one JSON object here." });
     body.appendChild(element("div", { className: "field" }, [label, textarea]));
