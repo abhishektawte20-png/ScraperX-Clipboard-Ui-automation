@@ -2,7 +2,7 @@
 
 A Chrome/Edge Manifest V3 extension that maps structured JSON from a ScraperX Rovo research agent into PitchBook RTS Business Entity and Company fields, with profile identity locking, preview/conflict review, and profile-scoped caching.
 
-**Current status: foundation stage.** No RTS field is automated yet. Every field is added to `registry/index.js` only after its full DOM evidence (section, Add button, opened form, every open dropdown, Save button, saved record) has been supplied and reviewed — see `docs/evidence-checklist.md`. Opening the assistant today lets you validate a pasted JSON response against the schema and preview the execution plan it would produce; every action in that preview reports as skipped, with the reason, until its field is evidenced.
+**Current status: first field wired up.** `businessEntity.nameVariations` (Add New Name Variation, Type dropdown, scoped Save, saved-value verification) is fully evidenced and implemented. Every other field is still preview-only until its full DOM evidence (section, Add button, opened form, every open dropdown, Save button, saved record) has been supplied and reviewed — see `docs/evidence-checklist.md`. Opening the assistant lets you validate a pasted JSON response, preview the execution plan, and apply pending actions — but applying always runs the profile identity lock first, and reading PBID/domain from the live RTS page is not evidenced yet, so **every apply attempt currently blocks there** until that's supplied (it's the next highest-value piece of evidence — see the checklist).
 
 The related [Conference ScraperX Field Assistant](https://github.com/abhishektawte20-png/scraperxsa123) is the architectural reference for this project and is not modified by this repo.
 
@@ -36,9 +36,14 @@ core/
   adapters/
     textField.js                    # native-setter text/textarea adapter
     nativeSelect.js                   # native <select> adapter (exact match)
-registry/index.js                # per-field selector registry, evidence-gated
+registry/
+  index.js                        # aggregates per-field registry files
+  businessEntity.nameVariations.js  # first evidenced, ready field
 content/panel.js, bootstrap.js   # shadow-DOM UI
-tests/test-static.mjs            # node --test suite for the logic above
+tests/
+  test-static.mjs                 # pure-logic suite (schema, cache, state machine, execution plan)
+  test-name-variations.mjs        # jsdom suite exercising the real workflow against a fixture
+fixtures/business-entity-name-variations.html
 docs/
   stage1-assessment.md
   evidence-checklist.md
@@ -47,6 +52,7 @@ docs/
 ## Running tests
 
 ```
+npm install   # first time only, pulls in jsdom (devDependency, used only for DOM-level tests)
 npm test
 ```
 
@@ -57,4 +63,5 @@ See `core/schema.js` for the authoritative shape. Top level: `schemaVersion`, `m
 ## Important limitations
 
 - Custom/searchable dropdowns, the Industries popup, the person-search/management journey, and controlled auto-save are all unimplemented pending evidence — see `docs/evidence-checklist.md`.
-- `identityLock.readRtsIdentityFromPage()` intentionally throws: reading PBID/Entity ID/domain from the live RTS page is not implemented until that DOM is evidenced.
+- `identityLock.readRtsIdentityFromPage()` intentionally throws: reading PBID/Entity ID/domain from the live RTS page is not implemented until that DOM is evidenced. Because the identity lock runs before every apply, this currently blocks applying **any** field, including name variations, even though that workflow itself is implemented and tested.
+- The "View All Name Variations" expand toggle's selector is unconfirmed; the workflow falls back to its exact visible text if the Add button isn't already present in the DOM.

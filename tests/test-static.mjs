@@ -22,6 +22,7 @@ import "../core/identityLock.js";
 import "../core/duplicates.js";
 import "../core/cache.js";
 import "../core/stateMachine.js";
+import "../registry/businessEntity.nameVariations.js";
 import "../registry/index.js";
 import "../core/executionPlan.js";
 
@@ -235,15 +236,36 @@ test("skips fields with no registry entry at all", () => {
   assert.match(action.skipReason, /No selector registry entry/);
 });
 
+test("businessEntity.nameVariations is evidenced and ready", () => {
+  assert.equal(registry.isReady("businessEntity.nameVariations"), true);
+});
+
 test("skips fields registered but not yet evidenced", () => {
-  assert.equal(registry.isReady("businessEntity.nameVariations"), false);
+  // Register a throwaway "missing" entry so this test doesn't depend on
+  // which real fields happen to be evidenced yet.
+  globalThis.SXRTS.registryEntries.push({
+    key: "businessEntity.websiteAddresses",
+    area: "Business Entity",
+    evidenceStatus: "missing",
+    saveButton: {}
+  });
+  const validated = schema.validate(validJson({
+    businessEntity: { websiteAddresses: [{ value: "https://psypher.in", action: "addIfMissing" }] }
+  }));
+  const actions = executionPlan.buildExecutionPlan(validated);
+  const action = actions.find((a) => a.jsonPath === "businessEntity.websiteAddresses");
+  assert.equal(action.executionStatus, "skipped");
+  assert.match(action.skipReason, /marked "missing"/);
+});
+
+test("builds a pending (not skipped) action for an evidenced, ready field", () => {
   const validated = schema.validate(validJson({
     businessEntity: { nameVariations: [{ name: "Psypher Inc", type: "Legal Name", action: "addIfMissing" }] }
   }));
   const actions = executionPlan.buildExecutionPlan(validated);
   const action = actions.find((a) => a.jsonPath === "businessEntity.nameVariations");
-  assert.equal(action.executionStatus, "skipped");
-  assert.match(action.skipReason, /marked "missing"/);
+  assert.equal(action.executionStatus, "pending");
+  assert.equal(action.area, "Business Entity");
 });
 
 test("does not build an action for an explicit skip", () => {

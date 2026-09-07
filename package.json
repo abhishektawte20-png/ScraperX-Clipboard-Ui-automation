@@ -5,5 +5,8 @@
   "description": "Chrome/Edge Manifest V3 extension mapping ScraperX Rovo JSON into PitchBook RTS.",
   "scripts": {
     "test": "node --test"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
   }
 }

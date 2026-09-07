@@ -8,8 +8,10 @@ const ASSISTANT_FILES = [
   "core/stateMachine.js",
   "core/adapters/textField.js",
   "core/adapters/nativeSelect.js",
+  "registry/businessEntity.nameVariations.js",
   "registry/index.js",
   "core/executionPlan.js",
+  "core/workflows/businessEntityNameVariations.js",
   "content/panel.js",
   "content/bootstrap.js"
 ];

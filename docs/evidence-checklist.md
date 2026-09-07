@@ -19,10 +19,10 @@ Evidence should be provided as raw outer HTML (copy from DevTools: right-click e
 
 | Field | Status | Notes |
 | --- | --- | --- |
-| Name variations (Add New Name Variation, Type dropdown, Save, verify) | Missing (registry scaffold exists, unevidenced) | Recommended first field per Stage 3 plan. |
+| Name variations (Add New Name Variation, Type dropdown, Save, verify) | **Ready** | `registry/businessEntity.nameVariations.js`, `core/workflows/businessEntityNameVariations.js`. Evidenced from Protocol DMC Spain (PBID 862926-85): native `<select class="businessEntityNameType">` with 9 exact options, `#addNameVariation`, `#saveBusinessEntityNameVariation` (scoped — distinct from the Entity section's own unrelated Save button), and the post-save `savedNameVariation` class + `data-defaultvalue` match used for read-back verification. "View All Name Variations" toggle selector still unconfirmed (text-fallback only). |
 | Formal / Familiar / Former / Legal name, start date | Missing | |
 | Parent / Spun Out Of lookups | Missing | |
-| Entity ID / PBID (read-only, for identity lock) | Missing | Blocks `identityLock.readRtsIdentityFromPage()`. |
+| Entity ID / PBID (read-only, for identity lock) | Partial | We have the visible value (`PBID: 862926-85`, top of page, next to a copy icon) and the URL pattern `https://rts.pitchbook.com/ext/{pbid}/BE/{sectionId}`, but not the outerHTML of the PBID/company-name header element itself. Still blocks `identityLock.readRtsIdentityFromPage()` — applying any field is blocked until this is evidenced, since the identity lock runs before every apply regardless of which field. **This is the next highest-value piece of evidence** — it unblocks real application for name variations immediately. |
 | EIN / FEIN | Missing | |
 | Entity Registration area | Missing | |
 | CRD area | Missing | |

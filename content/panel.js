@@ -1,10 +1,12 @@
 "use strict";
 
 /*
- * Foundation-stage panel: paste JSON, validate it against the schema, and
- * build/preview an execution plan. No field is applied to the page yet —
- * every action in the preview is "skipped" until its registry entry is
- * marked evidenceStatus: "ready" (see docs/evidence-checklist.md).
+ * Panel: paste JSON, validate it, preview the execution plan, and apply
+ * pending actions for fields whose workflow is wired up (currently only
+ * businessEntity.nameVariations). Applying always runs the profile
+ * identity lock first; since reading PBID/domain from the live RTS page
+ * is not evidenced yet, every apply attempt currently blocks there with a
+ * clear message rather than proceeding without an identity check.
  */
 (() => {
   function element(tag, options = {}, children = []) {
@@ -52,7 +54,7 @@
     ]));
 
     const body = element("div", { className: "body" });
-    body.appendChild(element("p", { className: "notice", text: "Foundation build: JSON validation and execution-plan preview only. No RTS field is automated yet — every field is added after its selectors are evidenced." }));
+    body.appendChild(element("p", { className: "notice", text: "Business Entity > Name Variations is wired up. Applying still requires the profile identity lock, which is blocked until RTS PBID/domain reading is evidenced — see docs/evidence-checklist.md. All other fields remain preview-only." }));
 
     const label = element("label", { text: "Paste ScraperX Rovo JSON response" });
     const textarea = element("textarea", { placeholder: "Paste one JSON object here." });
@@ -60,7 +62,8 @@
 
     const validateButton = element("button", { text: "Validate JSON", type: "button" });
     const previewButton = element("button", { text: "Build execution plan", type: "button" });
-    body.appendChild(element("div", { className: "buttons" }, [validateButton, previewButton]));
+    const applyButton = element("button", { text: "Apply pending actions", type: "button" });
+    body.appendChild(element("div", { className: "buttons" }, [validateButton, previewButton, applyButton]));
 
     const status = element("div", { className: "status" });
     body.appendChild(status);
@@ -69,6 +72,7 @@
     body.appendChild(table);
 
     let lastValidated = null;
+    let lastActions = [];
 
     function setStatus(text, type = "") {
       status.textContent = text;
@@ -87,29 +91,92 @@
       }
     });
 
+    const rowsByActionId = new Map();
+
+    function renderActionRow(action) {
+      const row = element("tr", {}, [
+        element("td", { text: `${action.jsonPath}${action.recordIndex !== null ? `[${action.recordIndex}]` : ""}` }),
+        element("td", { text: action.area || "(unregistered)" }),
+        element("td", { className: action.executionStatus === "skipped" ? "skipped" : "", text: action.executionStatus }),
+        element("td", { text: action.skipReason || "" })
+      ]);
+      rowsByActionId.set(action.actionId, { row, action });
+      return row;
+    }
+
+    function setRowStatus(actionId, statusText, reasonText) {
+      const entry = rowsByActionId.get(actionId);
+      if (!entry) return;
+      const statusCell = entry.row.children[2];
+      const reasonCell = entry.row.children[3];
+      statusCell.textContent = statusText;
+      statusCell.className = statusText === "failed" || statusText === "skipped" ? "skipped" : "";
+      reasonCell.textContent = reasonText || "";
+    }
+
     previewButton.addEventListener("click", () => {
       if (!lastValidated) {
         setStatus("Validate the JSON first.", "error");
         return;
       }
-      const actions = globalThis.SXRTS.executionPlan.buildExecutionPlan(lastValidated);
+      lastActions = globalThis.SXRTS.executionPlan.buildExecutionPlan(lastValidated);
+      rowsByActionId.clear();
       table.replaceChildren();
       table.appendChild(element("thead", {}, [element("tr", {}, [
         element("th", { text: "Field" }), element("th", { text: "Area" }), element("th", { text: "Status" }), element("th", { text: "Reason" })
       ])]));
       const tbody = element("tbody");
-      for (const action of actions) {
-        tbody.appendChild(element("tr", {}, [
-          element("td", { text: `${action.jsonPath}${action.recordIndex !== null ? `[${action.recordIndex}]` : ""}` }),
-          element("td", { text: action.area || "(unregistered)" }),
-          element("td", { className: action.executionStatus === "skipped" ? "skipped" : "", text: action.executionStatus }),
-          element("td", { text: action.skipReason || "" })
-        ]));
-      }
+      for (const action of lastActions) tbody.appendChild(renderActionRow(action));
       table.appendChild(tbody);
       table.classList.remove("hidden");
-      const skippedCount = actions.filter((a) => a.executionStatus === "skipped").length;
-      setStatus(`Built ${actions.length} action(s): ${skippedCount} skipped (no evidenced selector yet), ${actions.length - skippedCount} pending.`, actions.length ? "" : "error");
+      const skippedCount = lastActions.filter((a) => a.executionStatus === "skipped").length;
+      setStatus(`Built ${lastActions.length} action(s): ${skippedCount} skipped (no evidenced selector yet), ${lastActions.length - skippedCount} pending.`, lastActions.length ? "" : "error");
+    });
+
+    applyButton.addEventListener("click", async () => {
+      if (!lastActions.length) {
+        setStatus("Build the execution plan first.", "error");
+        return;
+      }
+
+      let rtsIdentity;
+      try {
+        rtsIdentity = globalThis.SXRTS.identityLock.readRtsIdentityFromPage();
+      } catch (error) {
+        setStatus(`Blocked: ${error.message}`, "error");
+        return;
+      }
+
+      const identityResult = globalThis.SXRTS.identityLock.compareIdentity(lastValidated.profileIdentity, rtsIdentity);
+      if (identityResult.status === "mismatch" || identityResult.status === "insufficient") {
+        setStatus(`Blocked by identity lock:\n${identityResult.reasons.join("\n")}`, "error");
+        return;
+      }
+
+      const pending = lastActions.filter((a) => a.executionStatus === "pending");
+      let applied = 0;
+      let skipped = 0;
+      let failed = 0;
+
+      for (const action of pending) {
+        if (action.jsonPath !== "businessEntity.nameVariations") continue; // only wired-up workflow so far
+        try {
+          const result = await globalThis.SXRTS.workflows.businessEntityNameVariations.applyNameVariation(action.proposedValue);
+          if (result.status === "savedValueVerified") {
+            applied += 1;
+            setRowStatus(action.actionId, "savedValueVerified", "");
+          } else {
+            skipped += 1;
+            setRowStatus(action.actionId, "skipped", result.detail || result.reason);
+          }
+        } catch (error) {
+          failed += 1;
+          setRowStatus(action.actionId, "failed", error.message);
+        }
+      }
+
+      const warningText = identityResult.reasons.length ? `\nIdentity warnings:\n${identityResult.reasons.join("\n")}` : "";
+      setStatus(`Applied ${applied}, skipped ${skipped}, failed ${failed}.${warningText}`, failed ? "error" : "success");
     });
 
     closeButton.addEventListener("click", () => document.getElementById("sxrts-assistant-root")?.remove());
