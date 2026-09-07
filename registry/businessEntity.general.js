@@ -9,14 +9,9 @@
  * save (#saveBusinessEntityNameVariation). Because they share one button,
  * these three are applied and saved together as one group.
  *
- * evidenceStatus is deliberately "in-review", not "ready": the Save
- * button was shown disabled before any edit, but no before/after-save
- * screenshot pair was supplied, so there is no confirmed signal for a
- * successful save. The workflow's current heuristic (Save button returns
- * to disabled + field values still match) is inferred from the observed
- * initial disabled state, not directly evidenced — see
- * docs/evidence-checklist.md. Flip evidenceStatus to "ready" once that
- * heuristic is confirmed against a real save.
+ * evidenceStatus: "ready" — confirmed by the researcher that this Save
+ * button does return to disabled after a successful save, matching the
+ * workflow's verification heuristic.
  */
 (() => {
   const EMAIL_DEFAULT_STRUCTURE_OPTIONS = [
@@ -77,7 +72,7 @@
       form: { input: { candidates: ["#webURL"] } },
       saveButton: SAVE_BUTTON,
       verification: VERIFICATION,
-      evidenceStatus: "in-review",
+      evidenceStatus: "ready",
       required: false
     },
     {
@@ -89,7 +84,7 @@
       form: { select: { candidates: ['select[name="businessEntity.emailDefaultStructure.id"]'], options: EMAIL_DEFAULT_STRUCTURE_OPTIONS } },
       saveButton: SAVE_BUTTON,
       verification: VERIFICATION,
-      evidenceStatus: "in-review",
+      evidenceStatus: "ready",
       required: false
     },
     {
@@ -102,7 +97,7 @@
       saveButton: SAVE_BUTTON,
       verification: VERIFICATION,
       duplicateRule: { normalize: "trim+collapseSpaces+lowercase", matchOn: ["text"] },
-      evidenceStatus: "in-review",
+      evidenceStatus: "ready",
       required: false
     }
   ];

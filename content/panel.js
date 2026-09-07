@@ -211,10 +211,64 @@
       let skipped = 0;
       let failed = 0;
 
-      for (const action of pending) {
-        if (action.jsonPath !== "businessEntity.nameVariations") continue; // only wired-up workflow so far
+      const nameVariationActions = pending.filter((a) => a.jsonPath === "businessEntity.nameVariations");
+      const generalJsonPaths = ["businessEntity.websiteAddresses", "businessEntity.emailDefaultStructure", "businessEntity.researchNotes"];
+      const generalActions = pending.filter((a) => generalJsonPaths.includes(a.jsonPath));
+      const sicActions = pending.filter((a) => a.jsonPath === "company.sicCodes");
+
+      for (const action of nameVariationActions) {
         try {
           const result = await globalThis.SXRTS.workflows.businessEntityNameVariations.applyNameVariation(action.proposedValue);
+          if (result.status === "savedValueVerified") {
+            applied += 1;
+            setRowStatus(action.actionId, "savedValueVerified", "");
+          } else {
+            skipped += 1;
+            setRowStatus(action.actionId, "skipped", result.detail || result.reason);
+          }
+        } catch (error) {
+          failed += 1;
+          setRowStatus(action.actionId, "failed", error.message);
+        }
+      }
+
+      // Website Address, Email Default Structure, and Research Notes share
+      // one Save button, so they're populated and saved together as one
+      // group rather than one action at a time.
+      if (generalActions.length) {
+        const fields = {};
+        const websiteActions = generalActions.filter((a) => a.jsonPath === "businessEntity.websiteAddresses");
+        if (websiteActions.length) fields.websiteAddresses = websiteActions.map((a) => a.proposedValue);
+        const emailAction = generalActions.find((a) => a.jsonPath === "businessEntity.emailDefaultStructure");
+        if (emailAction) fields.emailDefaultStructure = emailAction.proposedValue;
+        const notesActions = generalActions.filter((a) => a.jsonPath === "businessEntity.researchNotes");
+        if (notesActions.length) fields.researchNotes = notesActions.map((a) => a.proposedValue);
+
+        try {
+          const groupResult = await globalThis.SXRTS.workflows.businessEntityGeneral.applyBusinessEntityGeneral(fields);
+          const fieldKeyByJsonPath = {
+            "businessEntity.websiteAddresses": "websiteAddresses",
+            "businessEntity.emailDefaultStructure": "emailDefaultStructure",
+            "businessEntity.researchNotes": "researchNotes"
+          };
+          for (const action of generalActions) {
+            const fieldResult = groupResult.results?.[fieldKeyByJsonPath[action.jsonPath]];
+            const status = fieldResult?.status ?? groupResult.status;
+            const reason = fieldResult?.reason ?? groupResult.reason ?? "";
+            setRowStatus(action.actionId, status, reason);
+            if (status === "savedValueVerified") applied += 1;
+            else if (status === "skipped") skipped += 1;
+            else failed += 1;
+          }
+        } catch (error) {
+          failed += generalActions.length;
+          for (const action of generalActions) setRowStatus(action.actionId, "failed", error.message);
+        }
+      }
+
+      for (const action of sicActions) {
+        try {
+          const result = await globalThis.SXRTS.workflows.companySic.applySicCode(action.proposedValue);
           if (result.status === "savedValueVerified") {
             applied += 1;
             setRowStatus(action.actionId, "savedValueVerified", "");

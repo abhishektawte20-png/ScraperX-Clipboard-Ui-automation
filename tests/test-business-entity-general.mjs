@@ -2,9 +2,8 @@
 // workflow (Website Address, Email Default Structure, Research Notes),
 // run against a jsdom reconstruction of the evidenced markup. The Save
 // button's dirty-tracking and post-save disabled state are SIMULATED
-// here to match the observed initial-disabled state — this is the
-// inferred heuristic flagged as unconfirmed in
-// registry/businessEntity.general.js, not a directly evidenced behavior.
+// here to match the confirmed real behavior (the researcher verified
+// the button returns to disabled after a successful save).
 
 import assert from "node:assert/strict";
 import { test } from "node:test";

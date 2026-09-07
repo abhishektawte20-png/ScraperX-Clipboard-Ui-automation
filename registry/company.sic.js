@@ -8,14 +8,15 @@
  * hook (companySic.add()), and a Save button (#saveSicIndustryPath,
  * data-free but a stable id) that starts disabled="disabled".
  *
- * evidenceStatus is "in-review", not "ready": no before/after-save
- * screenshot pair was supplied, so — as with
- * registry/businessEntity.general.js — the "Save button returns to
- * disabled" verification signal is inferred from its initial state, not
- * directly confirmed. It's also unconfirmed whether "Add New Sic
- * Industry Path" adds a simple inline row (assumed here, matching the
- * code/source fields as given) or opens its own hierarchy popup like
- * Industries/Verticals.
+ * evidenceStatus: "ready" — confirmed by the researcher that this Save
+ * button does return to disabled after a successful save.
+ *
+ * Still unconfirmed: whether "Add New Sic Industry Path" really adds a
+ * simple inline row (assumed here, matching the code/source fields as
+ * given) or opens its own hierarchy popup like Industries/Verticals. If
+ * the Add button instead opens a popup, this workflow will fail loudly
+ * (no new row appears within its timeout) rather than silently doing the
+ * wrong thing.
  */
 (() => {
   const SOURCE_OPTIONS = [
@@ -38,7 +39,7 @@
     saveButton: { scopedTo: "Company > SIC", candidates: ["#saveSicIndustryPath"] },
     verification: { method: "disabledAfterSaveAndValueMatch" },
     duplicateRule: { normalize: "trim+collapseSpaces+lowercase", matchOn: ["code"] },
-    evidenceStatus: "in-review",
+    evidenceStatus: "ready",
     required: false
   };
 

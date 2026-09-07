@@ -3,8 +3,7 @@
 // The Add/Save behavior is simulated to match what was actually
 // evidenced: a new inline row appended before the Add button, and the
 // Save button (observed starting disabled) returning to disabled after
-// a short delay — the latter is the same inferred, unconfirmed heuristic
-// flagged in registry/company.sic.js.
+// a short delay — confirmed real behavior, per registry/company.sic.js.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
