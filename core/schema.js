@@ -194,6 +194,7 @@
   };
 
   const siteFields = {
+    siteName: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     siteType: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     address1: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     address2: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
@@ -202,7 +203,9 @@
     country: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     zip: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     phone: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
+    fax: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     email: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
+    status: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     action: { test: isValidAction, message: "must be a supported action." },
     source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false }
   };
@@ -219,10 +222,26 @@
     source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false }
   };
 
+  // Markdown auto-linkification (e.g. a chat UI turning a bare URL into
+  // "[text](url)" before it's copied out) can eat trailing JSON
+  // punctuation unpredictably. Rather than guess how to repair it — which
+  // risks silently producing a wrong or duplicated value — this fails
+  // fast with a specific, actionable message.
+  function detectMarkdownLinkCorruption(text) {
+    if (/\]\(https?:\/\/[^)]*\)/.test(text)) {
+      throw new SchemaValidationError([
+        "The pasted text contains markdown link syntax (e.g. \"[text](https://...)\") inside what should be raw JSON. " +
+        "This usually happens when copying from a chat UI that auto-linkifies URLs, and it can silently corrupt values. " +
+        "Please re-copy the raw JSON text (e.g. a \"copy raw\" / \"view source\" option, or paste into a plain-text editor first) and try again."
+      ]);
+    }
+  }
+
   function parseRawJson(raw) {
     if (typeof raw !== "string" || !raw.trim()) {
       throw new SchemaValidationError(["Paste the ScraperX Rovo JSON response first."]);
     }
+    detectMarkdownLinkCorruption(raw);
     const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
     const firstBrace = cleaned.indexOf("{");
     const lastBrace = cleaned.lastIndexOf("}");

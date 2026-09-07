@@ -25,6 +25,7 @@ import "../core/stateMachine.js";
 import "../registry/businessEntity.nameVariations.js";
 import "../registry/businessEntity.general.js";
 import "../registry/company.sic.js";
+import "../registry/company.sites.js";
 import "../registry/index.js";
 import "../core/promptBuilder.js";
 import "../core/executionPlan.js";
@@ -76,6 +77,19 @@ test("rejects wrong schemaVersion", () => {
 
 test("rejects malformed JSON", () => {
   assert.throws(() => schema.validate("{not json"), schema.SchemaValidationError);
+});
+
+test("detects markdown-link corruption with a specific, actionable message rather than a generic parse error", () => {
+  const corrupted = validJson({
+    businessEntity: {
+      researchNotes: [{ text: "note", action: "addIfMissing", source: 'https://example.com/page/[",](https://example.com/page/%22,)' }]
+    }
+  });
+  assert.throws(() => schema.validate(corrupted), (error) => {
+    assert.ok(error instanceof schema.SchemaValidationError);
+    assert.match(error.errors.join(" "), /markdown link syntax/);
+    return true;
+  });
 });
 
 test("rejects profileIdentity with no strong identifier", () => {
@@ -313,4 +327,23 @@ test("prompt output is itself accepted by the schema validator once wrapped in r
     }
   });
   assert.doesNotThrow(() => schema.validate(sample));
+});
+
+test("prompt requests the full evidenced scope (sites, industries, keywords, etc.) but never a management field", () => {
+  const prompt = promptBuilder.buildPrompt({});
+  for (const key of ["briefDescription", "fullDescription", "keywords", "industries", "verticals", "employeeHistory", "naicsCodes", "sites", "socialMediaIdentifiers"]) {
+    assert.ok(prompt.includes(key), `prompt should request "${key}"`);
+  }
+  const shapeStart = prompt.indexOf("Required JSON shape:");
+  const shapeEnd = prompt.indexOf("\n\n", shapeStart);
+  const requiredShape = JSON.parse(prompt.slice(prompt.indexOf("{", shapeStart), shapeEnd));
+  assert.equal(requiredShape.company.management, undefined);
+  assert.match(prompt, /out of scope/i); // the explicit "do not research management" instruction is still present
+});
+
+test("prompt lists the full evidenced Site Type, Site Status, and Country catalogs", () => {
+  const prompt = promptBuilder.buildPrompt({});
+  for (const label of ["Primary HQ", "Regional HQ", "Regional Office"]) assert.ok(prompt.includes(label));
+  for (const label of ["Current", "Former"]) assert.ok(prompt.includes(label));
+  for (const label of ["United States", "Germany", "Zimbabwe"]) assert.ok(prompt.includes(label));
 });

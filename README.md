@@ -58,6 +58,7 @@ registry/
   businessEntity.nameVariations.js  # ready
   businessEntity.general.js          # ready
   company.sic.js                      # ready
+  company.sites.js                     # missing — catalog-only (Site Type/Status/Country), feeds the prompt
 content/panel.js, bootstrap.js   # shadow-DOM UI
 tests/
   test-static.mjs                 # pure-logic suite (schema, cache, state machine, execution plan)
@@ -82,6 +83,8 @@ npm test
 ## Supported JSON (schema v1.0)
 
 See `core/schema.js` for the authoritative shape. Top level: `schemaVersion`, `meta`, `profileIdentity`, `businessEntity`, `company`. Every mutable value carries an explicit `action` (`addIfMissing`, `updateIfBlank`, `replaceAfterConfirmation`, `skip`); unrestricted replacement is never allowed. `profileIdentity` must include `companyName` and at least one of `pbId`, `entityId`, or `domain`.
+
+`core/promptBuilder.js` asks Rovo for the full schema-supported shape (description, keywords, industries, verticals, employee history, SIC/NAICS, sites, social media identifiers) even though only 5 fields have a wired-up workflow so far — fields without one just show up in the preview as skipped, so the research only has to happen once. `company.management` is deliberately never requested — that's excluded by decision, not an evidence gap. The parser also detects markdown-link-corrupted pastes (a common artifact of copying out of a chat UI that auto-linkifies URLs) and fails with a specific, actionable message rather than guessing at a repair.
 
 ## Important limitations
 

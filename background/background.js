@@ -12,6 +12,7 @@ const ASSISTANT_FILES = [
   "registry/businessEntity.nameVariations.js",
   "registry/businessEntity.general.js",
   "registry/company.sic.js",
+  "registry/company.sites.js",
   "registry/index.js",
   "core/promptBuilder.js",
   "core/executionPlan.js",

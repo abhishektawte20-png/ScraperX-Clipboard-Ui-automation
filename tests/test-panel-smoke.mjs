@@ -20,6 +20,7 @@ import "../core/adapters/contentEditable.js";
 import "../registry/businessEntity.nameVariations.js";
 import "../registry/businessEntity.general.js";
 import "../registry/company.sic.js";
+import "../registry/company.sites.js";
 import "../registry/index.js";
 import "../core/promptBuilder.js";
 import "../core/executionPlan.js";
