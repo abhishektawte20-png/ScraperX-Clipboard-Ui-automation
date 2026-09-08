@@ -99,3 +99,15 @@ A full audit of `content/panel.js` and everything it calls, prompted directly by
 - **Removed**: one dead variable (`isSelected`) left over from an earlier version of the publish handler.
 
 Still an open question, not a bug: which specific value in `websiteAddresses[0]` actually failed. The enhanced error message (above) will show it precisely on the next run.
+
+## Root cause found and fixed: bare domains in "source" fields
+
+The enhanced error message above did its job: a screenshot of a real run showed five separate records failing validation — `businessEntity.nameVariations[1].source`, `company.industries[0].source`, `company.verticals[0].source`, `company.sicCodes[0].source`, and `company.sites[1].source` — four of them with the identical received value `"www.aromagrowstore.com"`, and one (`company.sites[1].source`) with garbled non-URL text (`"Aroma Grow Store opens in Niles - Illinois News Joint in-niles/"`).
+
+The true pattern: the agent was consistently putting a bare domain in `source` fields, which previously required a strict, fully-qualified `https://` URL. Unlike the markdown-link corruption case (deliberately left unrepaired — proven to sometimes produce the wrong URL depending on where the corruption split), a bare domain has exactly one unambiguous, lossless interpretation: prepend `https://`. So this is now fixed at the validator level, not just asked for nicer in the prompt:
+
+- `core/schema.js` adds `isBareDomainString`, `isValidSourceValue`, and `normalizeSourceValue`, unified into a single shared `SOURCE_FIELD` descriptor used everywhere a `source` field is checked (name variations, social media, research notes, industries, verticals, employee history, SIC codes, sites, management, and `businessEntity.websiteAddresses`), replacing ten separate copies of the same inline check so this can't drift or be missed on a future field.
+- A bare domain in `source` (e.g. `"www.aromagrowstore.com"`) is now accepted and silently upgraded to `"https://www.aromagrowstore.com"` in the validated output — the panel and RTS never see the un-upgraded form.
+- Genuinely invalid `source` text — anything that's neither a full URL nor a bare domain, like the garbled `company.sites[1]` case above — is still rejected with the same self-diagnosing error message (now naming "a bare domain" as an accepted form too, so the message stays accurate). That one is not safely auto-fixable (there's no reliable way to extract the intended URL from garbled prose), so it remains a manual, one-field correction via the redesigned per-field editor in the preview panel.
+- The per-run prompt (`core/promptBuilder.js`) still asks Rovo for the stricter, ideal form (a full `https://` URL in every `source` field) — that's unchanged and still worth asking for — but the validator no longer depends on Rovo actually complying to avoid a hard failure.
+- Tests added to `tests/test-static.mjs` covering: a bare domain in both a record-array `source` field and an envelope-shaped `source` field is accepted and normalized to `https://`, and garbled non-URL/non-domain text is still rejected.

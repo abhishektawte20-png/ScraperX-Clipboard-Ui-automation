@@ -37,16 +37,46 @@
     }
   }
 
+  // Matches a bare host with an optional single trailing slash (e.g.
+  // "example.com" or "example.com/"), tolerant of the common harmless
+  // variant researchers and agents both tend to produce.
+  function isBareDomainString(value) {
+    return typeof value === "string" && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\/?$/i.test(value.trim());
+  }
+
   // RTS's "Website Address" field stores a bare host (e.g. "www.dmcspain.com"),
   // not a full https URL, so this accepts either form.
   function isWebsiteAddressValue(value) {
     if (typeof value !== "string" || !value.trim()) return false;
     const trimmed = value.trim();
-    if (isHttpsUrl(trimmed)) return true;
-    // Tolerates a bare host with an optional single trailing slash
-    // (e.g. "example.com/"), a common harmless variant.
-    return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\/?$/i.test(trimmed);
+    return isHttpsUrl(trimmed) || isBareDomainString(trimmed);
   }
+
+  // A "source" field is meant to be a citation URL, but Rovo repeatedly
+  // hands back a bare domain instead (e.g. "www.example.com" rather than
+  // the actual page it read). That's an unambiguous, lossless case to
+  // accept and upgrade — unlike markdown-link corruption, there's only
+  // one reasonable interpretation of a bare domain as a source.
+  function isValidSourceValue(value) {
+    return value === null || isHttpsUrl(value) || isBareDomainString(value);
+  }
+
+  function normalizeSourceValue(value) {
+    if (value === null || value === undefined) return null;
+    if (isHttpsUrl(value)) return value.trim();
+    if (isBareDomainString(value)) return `https://${value.trim()}`;
+    return value;
+  }
+
+  // Shared descriptor for every repeatable record's "source" field, so
+  // the leniency above applies everywhere uniformly instead of being
+  // re-implemented (and potentially drifting) at each call site.
+  const SOURCE_FIELD = {
+    test: isValidSourceValue,
+    message: "must be a valid HTTPS URL, a bare domain (e.g. www.example.com), or null.",
+    normalize: normalizeSourceValue,
+    required: false
+  };
 
   function isValidDate(value) {
     return typeof value === "string" && DATE_RE.test(value);
@@ -96,10 +126,10 @@
         safe.action = record.action;
       }
     }
-    if ("source" in record && record.source !== null && !isHttpsUrl(record.source)) {
-      pushError(errors, path, `source must be a valid HTTPS URL or null. Received: ${describeValue(record.source)}`);
+    if ("source" in record && record.source !== null && !isValidSourceValue(record.source)) {
+      pushError(errors, path, `source must be a valid HTTPS URL, a bare domain, or null. Received: ${describeValue(record.source)}`);
     } else {
-      safe.source = record.source ?? null;
+      safe.source = normalizeSourceValue(record.source ?? null);
     }
     if ("sourceDate" in record && record.sourceDate !== null && !isValidDate(record.sourceDate)) {
       pushError(errors, path, `sourceDate must use MM/DD/YYYY or be null. Received: ${describeValue(record.sourceDate)}`);
@@ -138,7 +168,7 @@
           pushError(errors, `${recordPath}.${key}`, `${check.message} Received: ${describeValue(fieldValue)}`);
           continue;
         }
-        safe[key] = fieldValue;
+        safe[key] = check.normalize ? check.normalize(fieldValue) : fieldValue;
       }
       return safe;
     }).filter(Boolean);
@@ -148,7 +178,7 @@
     name: { test: (v) => typeof v === "string" && v.trim().length > 0, message: "must be a non-empty string." },
     type: { test: (v) => typeof v === "string" && v.trim().length > 0, message: "must be a non-empty string (exact catalog match is checked at execution time)." },
     action: { test: isValidAction, message: "must be a supported action." },
-    source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false },
+    source: SOURCE_FIELD,
     sourceDate: { test: (v) => v === null || isValidDate(v), message: "must be MM/DD/YYYY or null.", required: false },
     confidence: { test: isValidConfidence, message: "must be high, medium, low, or null.", required: false }
   };
@@ -157,14 +187,14 @@
     network: { test: (v) => typeof v === "string" && v.trim().length > 0, message: "must be a non-empty string." },
     handleOrUrl: { test: (v) => typeof v === "string" && v.trim().length > 0, message: "must be a non-empty string." },
     action: { test: isValidAction, message: "must be a supported action." },
-    source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false },
+    source: SOURCE_FIELD,
     confidence: { test: isValidConfidence, message: "must be high, medium, low, or null.", required: false }
   };
 
   const researchNoteFields = {
     text: { test: (v) => typeof v === "string" && v.trim().length > 0, message: "must be a non-empty string." },
     action: { test: isValidAction, message: "must be a supported action." },
-    source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false }
+    source: SOURCE_FIELD
   };
 
   const keywordFields = {
@@ -178,20 +208,20 @@
     code: { test: (v) => typeof v === "string" && v.trim().length > 0, message: "must be a non-empty string." },
     isPrimary: { test: (v) => typeof v === "boolean" || v === null, message: "must be a boolean or null.", required: false },
     action: { test: isValidAction, message: "must be a supported action." },
-    source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false }
+    source: SOURCE_FIELD
   };
 
   const verticalFields = {
     value: { test: (v) => typeof v === "string" && v.trim().length > 0, message: "must be a non-empty string." },
     action: { test: isValidAction, message: "must be a supported action." },
-    source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false }
+    source: SOURCE_FIELD
   };
 
   const employeeHistoryFields = {
     count: { test: (v) => typeof v === "number" && Number.isFinite(v) && v >= 0, message: "must be a non-negative number." },
     asOfDate: { test: (v) => v === null || isValidDate(v), message: "must be MM/DD/YYYY or null.", required: false },
     action: { test: isValidAction, message: "must be a supported action." },
-    source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false }
+    source: SOURCE_FIELD
   };
 
   const codeFields = {
@@ -206,7 +236,7 @@
     code: { test: (v) => typeof v === "string" && v.trim().length > 0, message: "must be a non-empty string." },
     classificationSource: { test: (v) => v === null || SIC_CLASSIFICATION_SOURCES.has(v), message: "must be Morningstar, PitchBook, SEC, or null.", required: false },
     action: { test: isValidAction, message: "must be a supported action." },
-    source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false }
+    source: SOURCE_FIELD
   };
 
   const siteFields = {
@@ -223,7 +253,7 @@
     email: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     status: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     action: { test: isValidAction, message: "must be a supported action." },
-    source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false }
+    source: SOURCE_FIELD
   };
 
   const managementFields = {
@@ -235,7 +265,7 @@
     status: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     existingPersonPbId: { test: (v) => v === null || typeof v === "string", message: "must be a string or null.", required: false },
     action: { test: isValidAction, message: "must be a supported action." },
-    source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false }
+    source: SOURCE_FIELD
   };
 
   // Markdown auto-linkification (e.g. a chat UI turning a bare URL into
@@ -323,7 +353,7 @@
       safe.websiteAddresses = checkRecordArray(value.websiteAddresses, "businessEntity.websiteAddresses", errors, {
         value: { test: isWebsiteAddressValue, message: "must be a valid URL or bare domain (e.g. www.example.com)." },
         action: { test: isValidAction, message: "must be a supported action." },
-        source: { test: (v) => v === null || isHttpsUrl(v), message: "must be an HTTPS URL or null.", required: false },
+        source: SOURCE_FIELD,
         confidence: { test: isValidConfidence, message: "must be high, medium, low, or null.", required: false }
       });
     }

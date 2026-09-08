@@ -136,6 +136,38 @@ test("accepts a bare domain with a trailing slash", () => {
   assert.doesNotThrow(() => schema.validate(good));
 });
 
+test("accepts a bare domain in a source field and normalizes it to https://", () => {
+  const result = schema.validate(validJson({
+    businessEntity: {
+      nameVariations: [{ name: "Aroma Grow Store", type: "Legal Name", action: "addIfMissing", source: "www.aromagrowstore.com" }]
+    },
+    company: {
+      industries: [{ sector: null, group: null, code: "1", action: "addIfMissing", source: "aromagrowstore.com" }]
+    }
+  }));
+  assert.equal(result.businessEntity.nameVariations[0].source, "https://www.aromagrowstore.com");
+  assert.equal(result.company.industries[0].source, "https://aromagrowstore.com");
+});
+
+test("normalizes a bare domain source in an envelope-shaped field too", () => {
+  const result = schema.validate(validJson({
+    businessEntity: { nameVariations: [{ name: "Psypher Inc", type: "Legal Name", action: "addIfMissing" }] }
+  }));
+  assert.equal(result.businessEntity.nameVariations[0].source, null);
+
+  const withEnvelopeSource = schema.validate(validJson({
+    company: { briefDescription: { value: "A company.", action: "addIfMissing", source: "www.example.com" } }
+  }));
+  assert.equal(withEnvelopeSource.company.briefDescription.source, "https://www.example.com");
+});
+
+test("still rejects garbled, non-URL, non-domain text in a source field", () => {
+  const bad = validJson({
+    company: { verticals: [{ value: "Cannabis Retail", action: "addIfMissing", source: "Aroma Grow Store opens in Niles - Illinois News Joint in-niles/" }] }
+  });
+  assert.throws(() => schema.validate(bad), /must be a valid HTTPS URL, a bare domain \(e\.g\. www\.example\.com\), or null/);
+});
+
 test("rejects unsupported action value", () => {
   const bad = validJson({ company: { keywords: [{ value: "fintech", action: "forceReplace" }] } });
   assert.throws(() => schema.validate(bad));
