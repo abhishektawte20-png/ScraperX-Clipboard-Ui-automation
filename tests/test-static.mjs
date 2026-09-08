@@ -344,6 +344,14 @@ test("prompt output is itself accepted by the schema validator once wrapped in r
   assert.doesNotThrow(() => schema.validate(sample));
 });
 
+test("prompt includes worked examples of every real failure mode seen so far", () => {
+  const prompt = promptBuilder.buildPrompt({});
+  assert.match(prompt, /Not found on the official website/);
+  assert.match(prompt, /\[aromagrowstore\.com\]\(http:\/\/aromagrowstore\.com\/\)/);
+  assert.match(prompt, /SECTION 1: Entity Details/);
+  assert.match(prompt, /bare domain \(e\.g\. "example\.com"\) in any "source"/);
+});
+
 test("prompt requests the full evidenced scope (sites, industries, keywords, etc.) but never a management field", () => {
   const prompt = promptBuilder.buildPrompt({});
   for (const key of ["briefDescription", "fullDescription", "keywords", "industries", "verticals", "employeeHistory", "naicsCodes", "sites", "socialMediaIdentifiers"]) {
