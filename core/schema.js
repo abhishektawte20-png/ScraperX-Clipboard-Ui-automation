@@ -65,36 +65,49 @@
     errors.push(`${path}: ${message}`);
   }
 
+  // Renders the actual offending value into the error message (truncated)
+  // so a failure is self-diagnosable without a follow-up round trip.
+  function describeValue(value) {
+    let text;
+    try {
+      text = JSON.stringify(value);
+    } catch {
+      text = String(value);
+    }
+    if (text === undefined) text = String(value);
+    return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+  }
+
   function checkEnvelope(record, path, errors, { valueCheck, valueLabel, requireAction = true }) {
     if (!isPlainObject(record)) {
-      pushError(errors, path, "must be an object.");
+      pushError(errors, path, `must be an object. Received: ${describeValue(record)}`);
       return null;
     }
     const safe = {};
     if (!("value" in record) || !valueCheck(record.value)) {
-      pushError(errors, path, `value must be ${valueLabel}.`);
+      pushError(errors, path, `value must be ${valueLabel}. Received: ${describeValue(record.value)}`);
     } else {
       safe.value = record.value;
     }
     if (requireAction) {
       if (!isValidAction(record.action)) {
-        pushError(errors, path, "action must be one of addIfMissing, updateIfBlank, replaceAfterConfirmation, skip.");
+        pushError(errors, path, `action must be one of addIfMissing, updateIfBlank, replaceAfterConfirmation, skip. Received: ${describeValue(record.action)}`);
       } else {
         safe.action = record.action;
       }
     }
     if ("source" in record && record.source !== null && !isHttpsUrl(record.source)) {
-      pushError(errors, path, "source must be a valid HTTPS URL or null.");
+      pushError(errors, path, `source must be a valid HTTPS URL or null. Received: ${describeValue(record.source)}`);
     } else {
       safe.source = record.source ?? null;
     }
     if ("sourceDate" in record && record.sourceDate !== null && !isValidDate(record.sourceDate)) {
-      pushError(errors, path, "sourceDate must use MM/DD/YYYY or be null.");
+      pushError(errors, path, `sourceDate must use MM/DD/YYYY or be null. Received: ${describeValue(record.sourceDate)}`);
     } else if ("sourceDate" in record) {
       safe.sourceDate = record.sourceDate ?? null;
     }
     if ("confidence" in record && !isValidConfidence(record.confidence)) {
-      pushError(errors, path, "confidence must be high, medium, low, or null.");
+      pushError(errors, path, `confidence must be high, medium, low, or null. Received: ${describeValue(record.confidence)}`);
     } else {
       safe.confidence = record.confidence ? record.confidence.toLowerCase() : null;
     }
@@ -103,13 +116,13 @@
 
   function checkRecordArray(value, path, errors, fieldChecks) {
     if (!Array.isArray(value)) {
-      pushError(errors, path, "must be an array.");
+      pushError(errors, path, `must be an array. Received: ${describeValue(value)}`);
       return [];
     }
     return value.map((record, index) => {
       const recordPath = `${path}[${index}]`;
       if (!isPlainObject(record)) {
-        pushError(errors, recordPath, "must be an object.");
+        pushError(errors, recordPath, `must be an object. Received: ${describeValue(record)}`);
         return null;
       }
       const safe = {};
@@ -122,7 +135,7 @@
         }
         const fieldValue = record[key];
         if (!check.test(fieldValue)) {
-          pushError(errors, `${recordPath}.${key}`, check.message);
+          pushError(errors, `${recordPath}.${key}`, `${check.message} Received: ${describeValue(fieldValue)}`);
           continue;
         }
         safe[key] = fieldValue;
