@@ -86,10 +86,32 @@ test("validating a valid response builds a preview with the expected row count",
   const validateButton = Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Validate JSON");
   validateButton.click();
 
-  const rows = shadow.querySelectorAll("table tbody tr");
+  const rows = shadow.querySelectorAll(".action-card");
   assert.equal(rows.length, 2);
   const publishButton = Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Publish selected to RTS");
   assert.equal(publishButton.disabled, false);
+});
+
+test("a record's proposed value renders as labeled, individually editable fields (not a raw JSON blob)", () => {
+  const { shadow } = setupDom();
+  const responseArea = shadow.querySelector("#sxrts-response");
+  responseArea.value = JSON.stringify({
+    schemaVersion: "1.0",
+    profileIdentity: { companyName: "Psypher", pbId: "PB-1", domain: "psypher.in" },
+    businessEntity: { nameVariations: [{ name: "Psypher Inc", type: "Legal Name", action: "addIfMissing" }] }
+  });
+  Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Validate JSON").click();
+
+  const card = shadow.querySelector(".action-card");
+  const labels = Array.from(card.querySelectorAll(".value-field-label")).map((el) => el.textContent);
+  assert.ok(labels.includes("name"));
+  assert.ok(labels.includes("type"));
+
+  const nameField = Array.from(card.querySelectorAll(".value-field")).find((f) => f.querySelector(".value-field-label").textContent === "name");
+  const nameInput = nameField.querySelector("input, textarea");
+  assert.equal(nameInput.value, "Psypher Inc");
+  nameInput.value = "Psypher Incorporated"; // simulate a manual correction
+  assert.equal(nameInput.value, "Psypher Incorporated"); // no JSON parsing involved, nothing to silently discard
 });
 
 test("rejects invalid JSON without building a preview", () => {

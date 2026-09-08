@@ -122,12 +122,20 @@
       .status.error { color: #a3291c; }
       .status.success { color: #166f4c; }
 
-      table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 4px; }
-      th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .3px; color: #7a869c; padding: 6px 6px; border-bottom: 1px solid #dde2ea; }
-      td { padding: 7px 6px; border-bottom: 1px solid #eef0f4; vertical-align: top; overflow-wrap: anywhere; }
-      td.value-cell textarea { min-height: 44px; font-size: 11px; }
-      tr.row-skipped { opacity: .55; }
-      .badge { display: inline-block; padding: 2px 7px; border-radius: 100px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px; }
+      .action-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; max-height: 440px; overflow-y: auto; padding-right: 2px; }
+      .action-card { border: 1px solid #e2e6ed; border-radius: 8px; padding: 10px 12px; background: #fff; }
+      .action-card-skipped { opacity: .6; background: #fbfcfe; }
+      .action-card-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+      .action-card-head input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; width: auto; }
+      .action-card-title { flex: 1; min-width: 0; }
+      .action-card-field { font-weight: 700; font-size: 12px; color: #1b2430; overflow-wrap: anywhere; }
+      .action-card-area { font-size: 10.5px; color: #7a869c; text-transform: uppercase; letter-spacing: .3px; margin-top: 1px; }
+      .value-fields { display: flex; flex-direction: column; gap: 6px; padding-left: 24px; }
+      .value-field { display: grid; grid-template-columns: 88px 1fr; gap: 8px; align-items: start; }
+      .value-field-label { font-size: 10.5px; font-weight: 650; color: #7a869c; text-transform: uppercase; letter-spacing: .2px; padding-top: 7px; }
+      .value-field input, .value-field textarea { font-size: 12px; }
+      .action-reason { padding-left: 24px; margin-top: 6px; font-size: 11px; color: #974f0c; }
+      .badge { display: inline-block; padding: 2px 7px; border-radius: 100px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px; flex-shrink: 0; }
       .badge-pending { background: #eef5fc; color: #124a80; }
       .badge-skipped { background: #eef0f4; color: #7a869c; }
       .badge-saved { background: #e5f6ee; color: #166f4c; }
@@ -231,9 +239,9 @@
     // ---------- Card 3: preview + publish ----------
     const previewCard = element("div", { className: "card hidden" });
     previewCard.appendChild(element("h2", { text: "4 · Preview, edit if needed, then publish" }));
-    previewCard.appendChild(element("p", { className: "helptext", text: "Uncheck anything you don't want applied. Edit a proposed value directly if only a small correction is needed — it's re-validated when you publish." }));
-    const table = element("table");
-    previewCard.appendChild(table);
+    previewCard.appendChild(element("p", { className: "helptext", text: "Uncheck anything you don't want applied. Edit a field directly if only a small correction is needed — it's re-validated when you publish." }));
+    const actionList = element("div", { className: "action-list" });
+    previewCard.appendChild(actionList);
     const selectAllButton = element("button", { className: "btn secondary", text: "Select all pending", type: "button" });
     const publishButton = element("button", { className: "btn primary-cta", text: "Publish selected to RTS", type: "button" });
     const clearCacheButton = element("button", { className: "btn danger", text: "Clear cache for this profile", type: "button" });
@@ -301,34 +309,83 @@
       }
     });
 
+    // Renders one proposed value as labeled, individually editable fields
+    // (name/type/source/... for a record, or a single input for a plain
+    // string) instead of a raw JSON blob — readable, and there's no
+    // JSON.parse involved, so an edit can never be silently discarded.
+    function buildValueEditor(proposedValue) {
+      const wrap = element("div", { className: "value-fields" });
+
+      if (proposedValue === null || typeof proposedValue !== "object") {
+        const input = element("input", { value: proposedValue === null || proposedValue === undefined ? "" : String(proposedValue) });
+        wrap.appendChild(input);
+        return {
+          element: wrap,
+          getValue: () => input.value,
+          setDisabled: (disabled) => { input.disabled = disabled; }
+        };
+      }
+
+      const fields = [];
+      for (const [key, val] of Object.entries(proposedValue)) {
+        const fieldRow = element("div", { className: "value-field" });
+        const label = element("span", { className: "value-field-label", text: key });
+        const isLongText = typeof val === "string" && val.length > 60;
+        const input = isLongText
+          ? element("textarea", { value: val, rows: 2 })
+          : element("input", { value: val === null || val === undefined ? "" : String(val) });
+        fields.push({ key, input, wasNull: val === null, type: typeof val });
+        fieldRow.appendChild(label);
+        fieldRow.appendChild(input);
+        wrap.appendChild(fieldRow);
+      }
+
+      return {
+        element: wrap,
+        getValue: () => {
+          const out = {};
+          for (const { key, input, wasNull, type } of fields) {
+            const raw = input.value;
+            if (raw.trim() === "" && wasNull) { out[key] = null; continue; }
+            if (type === "boolean") { out[key] = raw.trim().toLowerCase() === "true"; continue; }
+            if (type === "number") {
+              const n = Number(raw);
+              out[key] = Number.isNaN(n) ? raw : n;
+              continue;
+            }
+            out[key] = raw;
+          }
+          return out;
+        },
+        setDisabled: (disabled) => { for (const { input } of fields) input.disabled = disabled; }
+      };
+    }
+
     function renderActionRow(action) {
       const isRunnable = action.executionStatus === "pending";
       const checkbox = element("input", { type: "checkbox", checked: isRunnable, disabled: !isRunnable });
-
-      const valueText = typeof action.proposedValue === "string" ? action.proposedValue : JSON.stringify(action.proposedValue);
-      const valueBox = element("textarea", { value: valueText, rows: 2 });
-      if (!isRunnable) valueBox.disabled = true;
+      const editor = buildValueEditor(action.proposedValue);
+      if (!isRunnable) editor.setDisabled(true);
 
       const statusBadge = element("span", { className: `badge badge-${isRunnable ? "pending" : "skipped"}`, text: action.executionStatus });
-      const reasonCell = element("td", { text: action.skipReason || "" });
+      const reasonEl = element("div", { className: "action-reason", text: action.skipReason || "" });
 
-      const row = element("tr", { className: isRunnable ? "" : "row-skipped" }, [
-        element("td", {}, [checkbox]),
-        element("td", { text: `${action.jsonPath}${action.recordIndex !== null ? `[${action.recordIndex}]` : ""}` }),
-        element("td", { text: action.area || "(unregistered)" }),
-        element("td", { className: "value-cell" }, [valueBox]),
-        element("td", {}, [statusBadge]),
-        reasonCell
+      const head = element("div", { className: "action-card-head" }, [
+        checkbox,
+        element("div", { className: "action-card-title" }, [
+          element("div", { className: "action-card-field", text: `${action.jsonPath}${action.recordIndex !== null ? `[${action.recordIndex}]` : ""}` }),
+          element("div", { className: "action-card-area", text: action.area || "(unregistered)" })
+        ]),
+        statusBadge
       ]);
 
+      const card = element("div", { className: `action-card${isRunnable ? "" : " action-card-skipped"}` }, [head, editor.element, reasonEl]);
+
       rowsByActionId.set(action.actionId, {
-        row, action, checkbox, valueBox, statusBadge, reasonCell,
-        getEditedValue() {
-          if (typeof action.proposedValue === "string") return valueBox.value;
-          try { return JSON.parse(valueBox.value); } catch { return action.proposedValue; }
-        }
+        card, action, checkbox, statusBadge, reasonEl, editor,
+        getEditedValue: editor.getValue
       });
-      return row;
+      return card;
     }
 
     function setRowStatus(actionId, statusText, reasonText) {
@@ -337,10 +394,10 @@
       entry.action.executionStatus = statusText;
       entry.statusBadge.textContent = statusText;
       entry.statusBadge.className = `badge badge-${statusText === "savedValueVerified" ? "saved" : statusText === "failed" ? "failed" : "skipped"}`;
-      entry.reasonCell.textContent = reasonText || "";
+      entry.reasonEl.textContent = reasonText || "";
       entry.checkbox.checked = false;
       entry.checkbox.disabled = true;
-      entry.valueBox.disabled = true;
+      entry.editor.setDisabled(true);
     }
 
     async function persistToCache() {
@@ -358,14 +415,8 @@
     function buildPlan() {
       lastActions = globalThis.SXRTS.executionPlan.buildExecutionPlan(lastValidated);
       rowsByActionId.clear();
-      table.replaceChildren();
-      table.appendChild(element("thead", {}, [element("tr", {}, [
-        element("th", { text: "Use" }), element("th", { text: "Field" }), element("th", { text: "Area" }),
-        element("th", { text: "Proposed value" }), element("th", { text: "Status" }), element("th", { text: "Reason" })
-      ])]));
-      const tbody = element("tbody");
-      for (const action of lastActions) tbody.appendChild(renderActionRow(action));
-      table.appendChild(tbody);
+      actionList.replaceChildren();
+      for (const action of lastActions) actionList.appendChild(renderActionRow(action));
       previewCard.classList.remove("hidden");
       const skippedCount = lastActions.filter((a) => a.executionStatus === "skipped").length;
       const runnable = lastActions.length - skippedCount;
@@ -437,8 +488,6 @@
       }
 
       let applied = 0, skipped = 0, failed = 0;
-      const selectedIds = new Set(selected.map((entry) => entry.action.actionId));
-      const isSelected = (a) => selectedIds.has(a.actionId);
       const valueFor = (a) => rowsByActionId.get(a.actionId).getEditedValue();
 
       const nameVariationActions = selected.filter((entry) => entry.action.jsonPath === "businessEntity.nameVariations");

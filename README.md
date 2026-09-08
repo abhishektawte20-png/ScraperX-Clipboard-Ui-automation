@@ -27,7 +27,7 @@ The related [Conference ScraperX Field Assistant](https://github.com/abhishektaw
 1. Open the company's Business Entity record in RTS, then click the toolbar icon. Company name and website prefill automatically if the identity lock can read them; otherwise enter them manually.
 2. Click **Copy prompt**, then **Open Rovo** and run the prompt there.
 3. Paste the JSON response back into the panel and click **Validate JSON** — the preview builds automatically on success.
-4. Review the preview table: each row is a proposed field with its RTS area, current status, and an **editable proposed value** (fix a small mistake directly in the cell — it's re-validated when you publish). Uncheck anything you don't want touched, or **Select all pending**.
+4. Review the preview: each proposed change is its own card (RTS area, status) with every field of that record shown as its own labeled, editable input — fix a small mistake directly there, no JSON editing required. Uncheck anything you don't want touched, or **Select all pending**.
 5. Click **Publish selected to RTS** — you'll be asked to confirm before anything is written. The identity lock runs first and blocks the whole batch on any mismatch.
 6. **Clear cache for this profile** removes the saved plan for the currently open company from `chrome.storage.local` at any time.
 
