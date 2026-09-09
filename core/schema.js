@@ -451,5 +451,5 @@
   }
 
   globalThis.SXRTS = globalThis.SXRTS || {};
-  globalThis.SXRTS.schema = { SCHEMA_VERSION, ACTIONS, validate, SchemaValidationError };
+  globalThis.SXRTS.schema = { SCHEMA_VERSION, ACTIONS, CONFIDENCE_LEVELS, validate, SchemaValidationError };
 })();

@@ -331,6 +331,39 @@ test("does not build an action for an unset envelope value", () => {
   assert.equal(actions.some((a) => a.jsonPath === "company.startDate"), false);
 });
 
+test("an envelope field's proposedValue is the full record (value/action/source/confidence), never a bare scalar", () => {
+  // Regression test: proposedValue was previously unwrapped to record.value
+  // for envelope-kind fields, so the workflow received a bare string where
+  // it expected an object with .action/.value — applyEmailDefaultStructureValue
+  // would then throw "'undefined' is not a supported Email Default
+  // Structure value" on every real publish attempt.
+  const validated = schema.validate(validJson({
+    businessEntity: { emailDefaultStructure: { value: "FirstName@domain.com", action: "addIfMissing", confidence: "high" } }
+  }));
+  const actions = executionPlan.buildExecutionPlan(validated);
+  const action = actions.find((a) => a.jsonPath === "businessEntity.emailDefaultStructure");
+  assert.equal(typeof action.proposedValue, "object");
+  assert.equal(action.proposedValue.value, "FirstName@domain.com");
+  assert.equal(action.proposedValue.action, "addIfMissing");
+  assert.equal(action.proposedValue.confidence, "high");
+});
+
+test("only the first proposed Website Address is ever pending; extras are skipped with a specific reason", () => {
+  const validated = schema.validate(validJson({
+    businessEntity: {
+      websiteAddresses: [
+        { value: "www.example.com", action: "addIfMissing" },
+        { value: "www.alt-example.com", action: "addIfMissing" }
+      ]
+    }
+  }));
+  const actions = executionPlan.buildExecutionPlan(validated).filter((a) => a.jsonPath === "businessEntity.websiteAddresses");
+  assert.equal(actions.length, 2);
+  assert.equal(actions[0].executionStatus, "pending");
+  assert.equal(actions[1].executionStatus, "skipped");
+  assert.match(actions[1].skipReason, /only one Website Address field/);
+});
+
 // ---- Prompt builder ----
 
 test("prompt includes the company name and website", () => {

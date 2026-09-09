@@ -44,11 +44,17 @@
         if (record.action === "skip") return;
 
         counter += 1;
-        const skipReason = !registryEntry
-          ? "No selector registry entry exists for this field yet."
-          : registryEntry.evidenceStatus !== "ready"
-            ? `Selector evidence for this field is marked "${registryEntry.evidenceStatus}"; automation is blocked until it is verified.`
-            : null;
+        // RTS has exactly one Website Address field; only the first
+        // proposed record can ever be written, so every subsequent one is
+        // skipped here rather than silently reported as applied later.
+        const isWebsiteAddressOverflow = source.jsonPath === "businessEntity.websiteAddresses" && index > 0;
+        const skipReason = isWebsiteAddressOverflow
+          ? "RTS has only one Website Address field; only the first proposed value can ever be applied."
+          : !registryEntry
+            ? "No selector registry entry exists for this field yet."
+            : registryEntry.evidenceStatus !== "ready"
+              ? `Selector evidence for this field is marked "${registryEntry.evidenceStatus}"; automation is blocked until it is verified.`
+              : null;
 
         actions.push({
           actionId: `A${counter}`,
@@ -59,7 +65,12 @@
           recordIndex: source.kind === "array" ? index : null,
           operation: record.action,
           currentValue: null,
-          proposedValue: source.kind === "envelope" ? record.value : record,
+          // Always the full record (value/action/source/confidence/...),
+          // never unwrapped to a bare scalar — every workflow function
+          // (e.g. applyEmailDefaultStructureValue) reads .action/.value
+          // off this object, so unwrapping it here silently breaks
+          // publishing for that field.
+          proposedValue: record,
           source: record.source ?? null,
           duplicateStatus: "unknown",
           conflictStatus: "unknown",

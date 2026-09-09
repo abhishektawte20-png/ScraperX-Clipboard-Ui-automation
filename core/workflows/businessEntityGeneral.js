@@ -8,8 +8,8 @@
  *
  * Save verification uses an INFERRED heuristic (button returns to
  * disabled + values still match) — see the evidenceStatus note in that
- * registry file. Until confirmed, evidenceStatus stays "in-review" and
- * this workflow is not reachable from the panel's Apply flow.
+ * registry file (evidenceStatus is "ready"; this workflow IS reachable
+ * from the panel's publish flow).
  */
 (() => {
   function wait(ms) {

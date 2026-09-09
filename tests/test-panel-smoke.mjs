@@ -155,3 +155,101 @@ test("copy agent setup instructions button exists and does not throw without a c
   assert.ok(button);
   assert.doesNotThrow(() => button.click());
 });
+
+test("action and Name Type render as constrained dropdowns, not free-text inputs", () => {
+  const { shadow } = setupDom();
+  const responseArea = shadow.querySelector("#sxrts-response");
+  responseArea.value = JSON.stringify({
+    schemaVersion: "1.0",
+    profileIdentity: { companyName: "Psypher", pbId: "PB-1" },
+    businessEntity: { nameVariations: [{ name: "Psypher Inc", type: "Legal Name", action: "addIfMissing", confidence: "high" }] }
+  });
+  Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Validate JSON").click();
+
+  const card = shadow.querySelector(".action-card");
+  const fieldByLabel = (label) => Array.from(card.querySelectorAll(".value-field")).find((f) => f.querySelector(".value-field-label").textContent === label);
+
+  const actionSelect = fieldByLabel("action").querySelector("select");
+  assert.ok(actionSelect, "action should render as a <select>, not an <input>");
+  assert.equal(actionSelect.value, "addIfMissing");
+
+  const typeSelect = fieldByLabel("type").querySelector("select");
+  assert.ok(typeSelect, "Name Type should render as a <select> populated from the evidenced catalog");
+  assert.equal(typeSelect.value, "Legal Name");
+
+  const confidenceSelect = fieldByLabel("confidence").querySelector("select");
+  assert.ok(confidenceSelect, "confidence should render as a <select>");
+  assert.equal(confidenceSelect.value, "high");
+});
+
+// Regression test for a real bug: core/executionPlan.js used to unwrap an
+// envelope-kind field's proposedValue down to a bare scalar (e.g. just the
+// email-pattern string), but applyEmailDefaultStructureValue() reads
+// .action/.value off an object — so every real publish of this field
+// either threw "'undefined' is not a supported Email Default Structure
+// value" or silently no-op'd. This exercises the full panel -> execution
+// plan -> workflow chain against a live (jsdom) RTS DOM to prove it now
+// actually writes and saves the value.
+test("publishing Email Default Structure actually writes and saves it end to end", async () => {
+  const { shadow } = setupDom();
+  document.body.insertAdjacentHTML("beforeend", `
+    <span class="flat-button__caption flat-button__caption-abc123">PBID: PB-1</span>
+    <input type="text" name="formalNameVariations" value="Aroma Grow Store" data-defaultvalue="Aroma Grow Store">
+    <input type="text" value="" id="domainValue">
+    <input type="text" value="" id="webURL" name="businessEntity.webURL">
+    <select name="businessEntity.emailDefaultStructure.id">
+      <option value="-1" selected="selected"></option>
+      <option value="2">FirstInitialLastName@domain.com</option>
+    </select>
+    <div class="highlight-textarea" contenteditable=""></div>
+    <input type="button" disabled="disabled" id="saveBusinessEntityButton">
+  `);
+  const emailSelect = document.querySelector('select[name="businessEntity.emailDefaultStructure.id"]');
+  const saveButton = document.getElementById("saveBusinessEntityButton");
+  emailSelect.addEventListener("input", () => { saveButton.disabled = false; });
+  emailSelect.addEventListener("change", () => { saveButton.disabled = false; });
+  saveButton.addEventListener("click", () => { setTimeout(() => { saveButton.disabled = true; }, 10); });
+
+  const responseArea = shadow.querySelector("#sxrts-response");
+  responseArea.value = JSON.stringify({
+    schemaVersion: "1.0",
+    profileIdentity: { companyName: "Aroma Grow Store", pbId: "PB-1" },
+    businessEntity: { emailDefaultStructure: { value: "FirstInitialLastName@domain.com", action: "addIfMissing" } }
+  });
+  Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Validate JSON").click();
+
+  const publishButton = Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Publish selected to RTS");
+  publishButton.click();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  assert.equal(emailSelect.value, "2");
+  const statuses = shadow.querySelectorAll(".status");
+  assert.match(statuses[statuses.length - 1].textContent, /Published 1, skipped 0, failed 0/);
+});
+
+test("an invalid manual edit is caught by real schema re-validation before any workflow runs", async () => {
+  const { shadow } = setupDom();
+  document.body.insertAdjacentHTML("beforeend", `
+    <span class="flat-button__caption flat-button__caption-abc123">PBID: PB-1</span>
+    <input type="text" name="formalNameVariations" value="Aroma Grow Store" data-defaultvalue="Aroma Grow Store">
+  `);
+  const responseArea = shadow.querySelector("#sxrts-response");
+  responseArea.value = JSON.stringify({
+    schemaVersion: "1.0",
+    profileIdentity: { companyName: "Aroma Grow Store", pbId: "PB-1" },
+    businessEntity: { nameVariations: [{ name: "Aroma Grow Store", type: "Legal Name", action: "addIfMissing" }] }
+  });
+  Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Validate JSON").click();
+
+  const card = shadow.querySelector(".action-card");
+  const nameField = Array.from(card.querySelectorAll(".value-field")).find((f) => f.querySelector(".value-field-label").textContent === "name");
+  nameField.querySelector("input").value = "   "; // blanked out by mistake while correcting it
+
+  const publishButton = Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Publish selected to RTS");
+  publishButton.click();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const reason = card.querySelector(".action-reason").textContent;
+  assert.match(reason, /must be a non-empty string/);
+  assert.ok(!/Add New Name Variation/.test(reason), "the workflow (and its live DOM lookup) must never run once re-validation rejects the edit");
+});

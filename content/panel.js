@@ -309,11 +309,39 @@
       }
     });
 
+    // Fields with a fixed, known set of legal values are rendered as a
+    // <select> instead of free text, so a manual correction can't
+    // introduce a typo the workflow would otherwise reject (or worse,
+    // silently mis-handle) deep inside a live DOM write. "action" and
+    // "confidence" are universal schema enums; the rest are real RTS
+    // dropdown catalogs already evidenced in the registry.
+    function fieldOptionsFor(jsonPath, key) {
+      if (key === "action") {
+        return { values: Array.from(globalThis.SXRTS.schema.ACTIONS), allowBlank: false };
+      }
+      if (key === "confidence") {
+        return { values: Array.from(globalThis.SXRTS.schema.CONFIDENCE_LEVELS), allowBlank: true };
+      }
+      if (jsonPath === "businessEntity.nameVariations" && key === "type") {
+        const options = globalThis.SXRTS.registry.getField(jsonPath)?.form?.typeDropdown?.options?.map((o) => o.label);
+        return options ? { values: options, allowBlank: false } : null;
+      }
+      if (jsonPath === "company.sicCodes" && key === "classificationSource") {
+        const options = globalThis.SXRTS.registry.getField(jsonPath)?.form?.sourceDropdown?.options?.map((o) => o.label);
+        return options ? { values: options, allowBlank: true } : null;
+      }
+      if (jsonPath === "businessEntity.emailDefaultStructure" && key === "value") {
+        const options = globalThis.SXRTS.registry.getField(jsonPath)?.form?.select?.options?.map((o) => o.label);
+        return options ? { values: options, allowBlank: true } : null;
+      }
+      return null;
+    }
+
     // Renders one proposed value as labeled, individually editable fields
     // (name/type/source/... for a record, or a single input for a plain
     // string) instead of a raw JSON blob — readable, and there's no
     // JSON.parse involved, so an edit can never be silently discarded.
-    function buildValueEditor(proposedValue) {
+    function buildValueEditor(proposedValue, jsonPath) {
       const wrap = element("div", { className: "value-fields" });
 
       if (proposedValue === null || typeof proposedValue !== "object") {
@@ -330,11 +358,24 @@
       for (const [key, val] of Object.entries(proposedValue)) {
         const fieldRow = element("div", { className: "value-field" });
         const label = element("span", { className: "value-field-label", text: key });
-        const isLongText = typeof val === "string" && val.length > 60;
-        const input = isLongText
-          ? element("textarea", { value: val, rows: 2 })
-          : element("input", { value: val === null || val === undefined ? "" : String(val) });
-        fields.push({ key, input, wasNull: val === null, type: typeof val });
+        const currentText = val === null || val === undefined ? "" : String(val);
+        const options = fieldOptionsFor(jsonPath, key);
+
+        let input;
+        if (options) {
+          input = element("select", {});
+          if (options.allowBlank) input.appendChild(element("option", { value: "", text: "(none)" }));
+          for (const optionLabel of options.values) {
+            input.appendChild(element("option", { value: optionLabel, text: optionLabel }));
+          }
+          const matched = options.values.find((v) => v.toLowerCase() === currentText.toLowerCase());
+          input.value = matched || (options.allowBlank ? "" : options.values[0]);
+        } else {
+          const isLongText = typeof val === "string" && val.length > 60;
+          input = isLongText ? element("textarea", { value: val, rows: 2 }) : element("input", { value: currentText });
+        }
+
+        fields.push({ key, input, type: typeof val });
         fieldRow.appendChild(label);
         fieldRow.appendChild(input);
         wrap.appendChild(fieldRow);
@@ -344,9 +385,9 @@
         element: wrap,
         getValue: () => {
           const out = {};
-          for (const { key, input, wasNull, type } of fields) {
+          for (const { key, input, type } of fields) {
             const raw = input.value;
-            if (raw.trim() === "" && wasNull) { out[key] = null; continue; }
+            if (raw.trim() === "") { out[key] = null; continue; }
             if (type === "boolean") { out[key] = raw.trim().toLowerCase() === "true"; continue; }
             if (type === "number") {
               const n = Number(raw);
@@ -364,7 +405,7 @@
     function renderActionRow(action) {
       const isRunnable = action.executionStatus === "pending";
       const checkbox = element("input", { type: "checkbox", checked: isRunnable, disabled: !isRunnable });
-      const editor = buildValueEditor(action.proposedValue);
+      const editor = buildValueEditor(action.proposedValue, action.jsonPath);
       if (!isRunnable) editor.setDisabled(true);
 
       const statusBadge = element("span", { className: `badge badge-${isRunnable ? "pending" : "skipped"}`, text: action.executionStatus });
@@ -490,10 +531,48 @@
       let applied = 0, skipped = 0, failed = 0;
       const valueFor = (a) => rowsByActionId.get(a.actionId).getEditedValue();
 
+      // Re-runs the real schema validator against a manually edited value
+      // (wrapped back into a minimal envelope/array under its real
+      // jsonPath) before it's ever handed to a workflow. This is what
+      // actually makes a manual correction safe: a typo that breaks the
+      // schema (e.g. an invalid Name Type, a malformed source URL) is
+      // caught here with the same error text the initial paste would have
+      // gotten, instead of reaching a live DOM write.
+      function revalidateEditedValue(action, editedValue) {
+        const [topKey, subKey] = action.jsonPath.split(".");
+        const wrapped = {
+          schemaVersion: "1.0",
+          profileIdentity: lastValidated.profileIdentity,
+          [topKey]: { [subKey]: action.recordIndex !== null ? [editedValue] : editedValue }
+        };
+        try {
+          globalThis.SXRTS.schema.validate(JSON.stringify(wrapped));
+          return null;
+        } catch (error) {
+          return error instanceof globalThis.SXRTS.schema.SchemaValidationError ? error.errors.join(" ") : String(error);
+        }
+      }
+
+      // Returns the edited value once it's confirmed schema-valid, or
+      // marks the row "failed" with the validator's own message and
+      // returns undefined so the caller skips calling the workflow.
+      function validatedValueFor(entry) {
+        const value = valueFor(entry.action);
+        const error = revalidateEditedValue(entry.action, value);
+        if (error) {
+          failed++;
+          setRowStatus(entry.action.actionId, "failed", error);
+          return undefined;
+        }
+        return value;
+      }
+
       const nameVariationActions = selected.filter((entry) => entry.action.jsonPath === "businessEntity.nameVariations");
       for (const entry of nameVariationActions) {
+        const value = validatedValueFor(entry);
+        if (value === undefined) continue;
         try {
-          const result = await globalThis.SXRTS.workflows.businessEntityNameVariations.applyNameVariation(valueFor(entry.action));
+          const result = await globalThis.SXRTS.workflows.businessEntityNameVariations.applyNameVariation(value);
           if (result.status === "savedValueVerified") { applied++; setRowStatus(entry.action.actionId, "savedValueVerified", ""); }
           else { skipped++; setRowStatus(entry.action.actionId, "skipped", result.detail || result.reason); }
         } catch (error) {
@@ -505,37 +584,48 @@
       const generalEntries = selected.filter((entry) => generalJsonPaths.includes(entry.action.jsonPath));
       if (generalEntries.length) {
         const fields = {};
-        const websiteEntries = generalEntries.filter((e) => e.action.jsonPath === "businessEntity.websiteAddresses");
-        if (websiteEntries.length) fields.websiteAddresses = websiteEntries.map((e) => valueFor(e.action));
-        const emailEntry = generalEntries.find((e) => e.action.jsonPath === "businessEntity.emailDefaultStructure");
-        if (emailEntry) fields.emailDefaultStructure = valueFor(emailEntry.action);
-        const notesEntries = generalEntries.filter((e) => e.action.jsonPath === "businessEntity.researchNotes");
-        if (notesEntries.length) fields.researchNotes = notesEntries.map((e) => valueFor(e.action));
-
-        try {
-          const groupResult = await globalThis.SXRTS.workflows.businessEntityGeneral.applyBusinessEntityGeneral(fields);
-          const fieldKeyByJsonPath = {
-            "businessEntity.websiteAddresses": "websiteAddresses",
-            "businessEntity.emailDefaultStructure": "emailDefaultStructure",
-            "businessEntity.researchNotes": "researchNotes"
-          };
-          for (const entry of generalEntries) {
-            const fieldResult = groupResult.results?.[fieldKeyByJsonPath[entry.action.jsonPath]];
-            const status = fieldResult?.status ?? groupResult.status;
-            const reason = fieldResult?.reason ?? groupResult.reason ?? "";
-            setRowStatus(entry.action.actionId, status, reason);
-            if (status === "savedValueVerified") applied++; else if (status === "skipped") skipped++; else failed++;
+        const validEntries = [];
+        for (const entry of generalEntries) {
+          const value = validatedValueFor(entry);
+          if (value === undefined) continue;
+          validEntries.push(entry);
+          if (entry.action.jsonPath === "businessEntity.websiteAddresses") {
+            (fields.websiteAddresses ??= []).push(value);
+          } else if (entry.action.jsonPath === "businessEntity.emailDefaultStructure") {
+            fields.emailDefaultStructure = value;
+          } else if (entry.action.jsonPath === "businessEntity.researchNotes") {
+            (fields.researchNotes ??= []).push(value);
           }
-        } catch (error) {
-          failed += generalEntries.length;
-          for (const entry of generalEntries) setRowStatus(entry.action.actionId, "failed", error.message);
+        }
+
+        if (validEntries.length) {
+          try {
+            const groupResult = await globalThis.SXRTS.workflows.businessEntityGeneral.applyBusinessEntityGeneral(fields);
+            const fieldKeyByJsonPath = {
+              "businessEntity.websiteAddresses": "websiteAddresses",
+              "businessEntity.emailDefaultStructure": "emailDefaultStructure",
+              "businessEntity.researchNotes": "researchNotes"
+            };
+            for (const entry of validEntries) {
+              const fieldResult = groupResult.results?.[fieldKeyByJsonPath[entry.action.jsonPath]];
+              const status = fieldResult?.status ?? groupResult.status;
+              const reason = fieldResult?.reason ?? groupResult.reason ?? "";
+              setRowStatus(entry.action.actionId, status, reason);
+              if (status === "savedValueVerified") applied++; else if (status === "skipped") skipped++; else failed++;
+            }
+          } catch (error) {
+            failed += validEntries.length;
+            for (const entry of validEntries) setRowStatus(entry.action.actionId, "failed", error.message);
+          }
         }
       }
 
       const sicEntries = selected.filter((entry) => entry.action.jsonPath === "company.sicCodes");
       for (const entry of sicEntries) {
+        const value = validatedValueFor(entry);
+        if (value === undefined) continue;
         try {
-          const result = await globalThis.SXRTS.workflows.companySic.applySicCode(valueFor(entry.action));
+          const result = await globalThis.SXRTS.workflows.companySic.applySicCode(value);
           if (result.status === "savedValueVerified") { applied++; setRowStatus(entry.action.actionId, "savedValueVerified", ""); }
           else { skipped++; setRowStatus(entry.action.actionId, "skipped", result.detail || result.reason); }
         } catch (error) {
