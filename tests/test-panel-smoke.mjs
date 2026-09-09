@@ -143,6 +143,86 @@ test("publish blocks via the identity lock when no RTS page is present", async (
   assert.match(publishStatus.textContent, /Blocked:/);
 });
 
+// Regression coverage for a real reported case: an existing RTS profile
+// with a visible PBID but a blank Domain field. Rovo's JSON always has
+// pbId/entityId as null (it has no way to know an RTS-internal ID), so
+// domain is the only field that could ever match — and here it can't,
+// even though the profile is legitimate. This must no longer be a hard
+// block; it should ask the researcher to manually confirm instead.
+function addIdentityWithNoStrongMatch() {
+  document.body.insertAdjacentHTML("beforeend", `
+    <span class="flat-button__caption flat-button__caption-abc123">PBID: 862926-85</span>
+    <input type="text" name="formalNameVariations" value="Aroma Grow Store" data-defaultvalue="Aroma Grow Store">
+    <input type="text" value="" id="domainValue">
+  `);
+}
+
+test("insufficient identity (no strong match, but no conflict either) asks for manual confirmation instead of blocking", async () => {
+  const { shadow } = setupDom();
+  addIdentityWithNoStrongMatch();
+  const responseArea = shadow.querySelector("#sxrts-response");
+  responseArea.value = JSON.stringify({
+    schemaVersion: "1.0",
+    profileIdentity: { companyName: "Aroma Grow Store", domain: "aromagrowstore.com" },
+    businessEntity: { nameVariations: [{ name: "Best Supply Partners LLC", type: "Legal Name", action: "addIfMissing" }] }
+  });
+  Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Validate JSON").click();
+
+  let confirmCalls = 0;
+  window.confirm = () => { confirmCalls += 1; return confirmCalls === 1; }; // accept the generic publish confirm, decline the identity one
+
+  Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Publish selected to RTS").click();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const statuses = shadow.querySelectorAll(".status");
+  assert.match(statuses[statuses.length - 1].textContent, /could not be auto-confirmed, and you chose not to proceed manually/);
+  assert.equal(confirmCalls, 2, "both the generic publish confirm and the identity confirm should have been asked");
+});
+
+test("insufficient identity proceeds to publish once manually confirmed", async () => {
+  const { shadow } = setupDom();
+  addIdentityWithNoStrongMatch();
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="name-variation-row">
+      <input type="text" value="" data-defaultvalue="" class="input businessEntityName" data-disabled-if-dnb-field="">
+      <select class="input input_select businessEntityNameType" data-disabled-if-dnb-field="">
+        <option value="LEGAL" selected="selected">Legal Name</option>
+      </select>
+    </div>
+    <input type="button" value="Add New Name Variation" class="btn" id="addNameVariation">
+    <input type="button" value="Save" id="saveBusinessEntityNameVariation">
+  `);
+  const nameInputs = () => document.querySelectorAll(".businessEntityName");
+  document.getElementById("addNameVariation").addEventListener("click", () => {
+    const row = document.createElement("div");
+    row.innerHTML = `<input type="text" value="" data-defaultvalue="" class="input businessEntityName"><select class="input input_select businessEntityNameType"><option value="LEGAL" selected="selected">Legal Name</option></select>`;
+    document.getElementById("addNameVariation").insertAdjacentElement("beforebegin", row);
+  });
+  document.getElementById("saveBusinessEntityNameVariation").addEventListener("click", () => {
+    setTimeout(() => {
+      const last = [...nameInputs()].pop();
+      last.dataset.defaultvalue = last.value;
+      last.classList.add("savedNameVariation");
+    }, 10);
+  });
+
+  const responseArea = shadow.querySelector("#sxrts-response");
+  responseArea.value = JSON.stringify({
+    schemaVersion: "1.0",
+    profileIdentity: { companyName: "Aroma Grow Store", domain: "aromagrowstore.com" },
+    businessEntity: { nameVariations: [{ name: "Best Supply Partners LLC", type: "Legal Name", action: "addIfMissing" }] }
+  });
+  Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Validate JSON").click();
+
+  window.confirm = () => true; // accept both the generic publish confirm and the identity confirm
+
+  Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Publish selected to RTS").click();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  const statuses = shadow.querySelectorAll(".status");
+  assert.match(statuses[statuses.length - 1].textContent, /Published 1, skipped 0, failed 0/);
+});
+
 test("clear cache button does not throw when no cache exists yet", async () => {
   const { shadow } = setupDom();
   const clearButton = Array.from(shadow.querySelectorAll("button")).find((b) => b.textContent === "Clear cache for this profile");

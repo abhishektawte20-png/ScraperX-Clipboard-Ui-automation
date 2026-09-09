@@ -521,11 +521,34 @@
       }
 
       const identityResult = globalThis.SXRTS.identityLock.compareIdentity(lastValidated.profileIdentity, rtsIdentity);
-      if (identityResult.status === "mismatch" || identityResult.status === "insufficient") {
+      // An active conflict (e.g. the domains disagree) is never overridable
+      // — that's the strongest signal this might be the wrong profile.
+      if (identityResult.status === "mismatch") {
         setStatus(publishStatus, `Blocked by identity lock:\n${identityResult.reasons.join("\n")}`, "error");
         publishButton.disabled = false;
         clearCacheButton.disabled = false;
         return;
+      }
+      // No active conflict, but also nothing strong (PBID/domain) to
+      // compare — common for a real profile that just hasn't had its
+      // domain filled in yet, since Rovo can never know an RTS PBID on
+      // its own. Rather than a hard block or a silent bypass, ask the
+      // researcher to look at both sides and explicitly confirm — the
+      // same human-in-the-loop principle used for the publish step itself.
+      if (identityResult.status === "insufficient") {
+        const json = lastValidated.profileIdentity;
+        const confirmed = window.confirm(
+          "No PBID or domain match was found to automatically confirm this is the right RTS profile.\n\n" +
+          `Open RTS profile: PBID ${rtsIdentity.pbId || "(none)"} · formal name "${rtsIdentity.formalName || "(none)"}" · domain ${rtsIdentity.domain || "(none)"}\n` +
+          `Researched company: "${json.companyName || "(none)"}" · domain ${json.domain || "(none)"}\n\n` +
+          "Only proceed if you have personally verified these are the same company. Publish anyway?"
+        );
+        if (!confirmed) {
+          setStatus(publishStatus, "Publish cancelled: identity could not be auto-confirmed, and you chose not to proceed manually.", "error");
+          publishButton.disabled = false;
+          clearCacheButton.disabled = false;
+          return;
+        }
       }
 
       let applied = 0, skipped = 0, failed = 0;
