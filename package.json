@@ -4,9 +4,11 @@
   "private": true,
   "description": "Chrome/Edge Manifest V3 extension mapping ScraperX Rovo JSON into PitchBook RTS.",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test tests/test-*.mjs",
+    "test:e2e": "node --test tests/e2e/*.mjs"
   },
   "devDependencies": {
-    "jsdom": "^30.0.1"
+    "jsdom": "^30.0.1",
+    "playwright": "^1.56.1"
   }
 }

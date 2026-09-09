@@ -68,6 +68,8 @@ tests/
   test-business-entity-general.mjs  # jsdom suite for the shared-save-group workflow
   test-company-sic.mjs              # jsdom suite for the SIC workflow
   test-panel-smoke.mjs              # mounts the real panel UI and exercises validate/preview/publish-guard
+  e2e/
+    live-browser.test.mjs           # real Chromium (Playwright) run of the actual extension against the evidenced fixtures — see e2e/README.md
 fixtures/
 docs/
   stage1-assessment.md
@@ -77,9 +79,18 @@ docs/
 ## Running tests
 
 ```
-npm install   # first time only, pulls in jsdom (devDependency, used only for DOM-level tests)
-npm test
+npm install   # first time only, pulls in jsdom + playwright (both devDependencies)
+npm test      # fast jsdom suite (no browser needed) — run this constantly
 ```
+
+There's also a real-browser end-to-end test, kept separate because it needs an actual Chromium install and takes a bit longer:
+
+```
+npx playwright install chromium   # first time only
+npm run test:e2e
+```
+
+See `tests/e2e/README.md` for what it checks and why it exists — it's already caught two real integration bugs (a broken Email Default Structure publish, and an over-strict identity lock) that the jsdom suite couldn't see because jsdom doesn't exercise real event timing or rendering. Run it before shipping any change that touches `core/executionPlan.js`, `content/panel.js`, or a `core/workflows/*.js` file.
 
 ## Supported JSON (schema v1.0)
 
