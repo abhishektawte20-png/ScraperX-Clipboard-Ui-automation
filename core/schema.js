@@ -37,6 +37,22 @@
     }
   }
 
+  // Plain (non-secure) URLs show up occasionally too. There's exactly one
+  // reasonable reading of one of these — upgrade the scheme — so it's
+  // handled the same way as a bare domain: accepted, then normalized.
+  function isHttpUrl(value) {
+    if (typeof value !== "string") return false;
+    try {
+      return new URL(value).protocol === "http:";
+    } catch {
+      return false;
+    }
+  }
+
+  function upgradeToHttps(value) {
+    return value.trim().replace(/^http:\/\//i, "https://");
+  }
+
   // Matches a bare host with an optional single trailing slash (e.g.
   // "example.com" or "example.com/"), tolerant of the common harmless
   // variant researchers and agents both tend to produce.
@@ -45,25 +61,33 @@
   }
 
   // RTS's "Website Address" field stores a bare host (e.g. "www.dmcspain.com"),
-  // not a full https URL, so this accepts either form.
+  // not a full https URL, so this accepts any of a bare domain, an https
+  // URL, or an http URL (the last two get their scheme normalized below).
   function isWebsiteAddressValue(value) {
     if (typeof value !== "string" || !value.trim()) return false;
     const trimmed = value.trim();
-    return isHttpsUrl(trimmed) || isBareDomainString(trimmed);
+    return isHttpsUrl(trimmed) || isHttpUrl(trimmed) || isBareDomainString(trimmed);
+  }
+
+  function normalizeWebsiteAddressValue(value) {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return isHttpUrl(trimmed) ? upgradeToHttps(trimmed) : trimmed;
   }
 
   // A "source" field is meant to be a citation URL, but Rovo repeatedly
-  // hands back a bare domain instead (e.g. "www.example.com" rather than
-  // the actual page it read). That's an unambiguous, lossless case to
-  // accept and upgrade — unlike markdown-link corruption, there's only
-  // one reasonable interpretation of a bare domain as a source.
+  // hands back a bare domain, or a plain http:// URL, instead of a full
+  // https:// citation. Both are unambiguous, lossless cases to accept and
+  // upgrade — unlike markdown-link corruption, there's only one reasonable
+  // interpretation of either as a source.
   function isValidSourceValue(value) {
-    return value === null || isHttpsUrl(value) || isBareDomainString(value);
+    return value === null || isHttpsUrl(value) || isHttpUrl(value) || isBareDomainString(value);
   }
 
   function normalizeSourceValue(value) {
     if (value === null || value === undefined) return null;
     if (isHttpsUrl(value)) return value.trim();
+    if (isHttpUrl(value)) return upgradeToHttps(value);
     if (isBareDomainString(value)) return `https://${value.trim()}`;
     return value;
   }
@@ -73,7 +97,7 @@
   // re-implemented (and potentially drifting) at each call site.
   const SOURCE_FIELD = {
     test: isValidSourceValue,
-    message: "must be a valid HTTPS URL, a bare domain (e.g. www.example.com), or null.",
+    message: "must be a valid HTTPS or HTTP URL, a bare domain (e.g. www.example.com), or null.",
     normalize: normalizeSourceValue,
     required: false
   };
@@ -342,7 +366,12 @@
     if ("nameVariations" in value) {
       safe.nameVariations = checkRecordArray(value.nameVariations, "businessEntity.nameVariations", errors, nameVariationFields);
     }
-    if ("emailDefaultStructure" in value) {
+    // A whole envelope can legitimately arrive as a bare `null` (Rovo
+    // opting out of the field entirely) rather than the nested
+    // {value: null, action: "skip"} shape — treated the same as the key
+    // being absent, not as a shape error, since both mean "nothing to
+    // propose here."
+    if ("emailDefaultStructure" in value && value.emailDefaultStructure !== null) {
       safe.emailDefaultStructure = checkEnvelope(value.emailDefaultStructure, "businessEntity.emailDefaultStructure", errors, {
         valueCheck: isNullableString, valueLabel: "a string or null"
       });
@@ -351,7 +380,7 @@
       // RTS has exactly one Website Address field; the workflow uses the
       // first array entry and reports a warning for any additional ones.
       safe.websiteAddresses = checkRecordArray(value.websiteAddresses, "businessEntity.websiteAddresses", errors, {
-        value: { test: isWebsiteAddressValue, message: "must be a valid URL or bare domain (e.g. www.example.com)." },
+        value: { test: isWebsiteAddressValue, message: "must be a valid URL or bare domain (e.g. www.example.com).", normalize: normalizeWebsiteAddressValue },
         action: { test: isValidAction, message: "must be a supported action." },
         source: SOURCE_FIELD,
         confidence: { test: isValidConfidence, message: "must be high, medium, low, or null.", required: false }
@@ -380,19 +409,22 @@
     for (const key of Object.keys(value)) {
       if (!known.has(key)) warnings.push(`company.${key} is not a recognized field and was ignored.`);
     }
-    if ("startDate" in value) {
+    // See the matching comment in validateBusinessEntity: a bare `null`
+    // for a whole envelope means "nothing to propose," same as an absent
+    // key, not a shape error.
+    if ("startDate" in value && value.startDate !== null) {
       safe.startDate = checkEnvelope(value.startDate, "company.startDate", errors, { valueCheck: (v) => v === null || isValidDate(v), valueLabel: "MM/DD/YYYY or null" });
     }
-    if ("briefDescription" in value) {
+    if ("briefDescription" in value && value.briefDescription !== null) {
       safe.briefDescription = checkEnvelope(value.briefDescription, "company.briefDescription", errors, { valueCheck: isNullableString, valueLabel: "a string or null" });
     }
-    if ("fullDescription" in value) {
+    if ("fullDescription" in value && value.fullDescription !== null) {
       safe.fullDescription = checkEnvelope(value.fullDescription, "company.fullDescription", errors, { valueCheck: isNullableString, valueLabel: "a string or null" });
     }
     if ("keywords" in value) {
       safe.keywords = checkRecordArray(value.keywords, "company.keywords", errors, keywordFields);
     }
-    if ("searchKeywords" in value) {
+    if ("searchKeywords" in value && value.searchKeywords !== null) {
       // A single free-text field in RTS, not a repeatable tag list like keywords.
       safe.searchKeywords = checkEnvelope(value.searchKeywords, "company.searchKeywords", errors, { valueCheck: isNullableString, valueLabel: "a string or null" });
     }

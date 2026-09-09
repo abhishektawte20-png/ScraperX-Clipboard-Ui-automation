@@ -126,9 +126,15 @@ test("accepts valid MM/DD/YYYY date", () => {
   assert.doesNotThrow(() => schema.validate(good));
 });
 
-test("rejects non-HTTPS URL", () => {
-  const bad = validJson({ businessEntity: { websiteAddresses: [{ value: "http://psypher.in", action: "addIfMissing" }] } });
+test("rejects a website address with a non-web URL scheme", () => {
+  const bad = validJson({ businessEntity: { websiteAddresses: [{ value: "ftp://psypher.in", action: "addIfMissing" }] } });
   assert.throws(() => schema.validate(bad));
+});
+
+test("accepts an http:// website address and upgrades it to https://", () => {
+  const good = validJson({ businessEntity: { websiteAddresses: [{ value: "http://psypher.in", action: "addIfMissing" }] } });
+  const result = schema.validate(good);
+  assert.equal(result.businessEntity.websiteAddresses[0].value, "https://psypher.in");
 });
 
 test("accepts a bare domain with a trailing slash", () => {
@@ -161,11 +167,40 @@ test("normalizes a bare domain source in an envelope-shaped field too", () => {
   assert.equal(withEnvelopeSource.company.briefDescription.source, "https://www.example.com");
 });
 
+test("a bare `null` for a whole envelope field is treated as \"nothing to propose,\" not a shape error", () => {
+  // Real observed failure: Rovo sent "emailDefaultStructure": null instead
+  // of the nested {value: null, action: "skip"} shape, which used to hard
+  // -fail the whole response (checkEnvelope requires an object).
+  const result = schema.validate(validJson({
+    businessEntity: { emailDefaultStructure: null },
+    company: { startDate: null, briefDescription: null, fullDescription: null, searchKeywords: null }
+  }));
+  assert.equal("emailDefaultStructure" in result.businessEntity, false);
+  assert.equal("startDate" in result.company, false);
+  assert.equal("briefDescription" in result.company, false);
+  assert.equal("fullDescription" in result.company, false);
+  assert.equal("searchKeywords" in result.company, false);
+});
+
+test("accepts an http:// website address or source and upgrades it to https://", () => {
+  // Real observed failure: Rovo sent "http://www.aromagrowstore.com" for
+  // websiteAddresses[].value, which previously matched neither the
+  // https-URL check nor the bare-domain regex (which forbids any scheme).
+  const result = schema.validate(validJson({
+    businessEntity: {
+      websiteAddresses: [{ value: "http://www.aromagrowstore.com", action: "addIfMissing" }],
+      nameVariations: [{ name: "Aroma Grow Store", type: "Legal Name", action: "addIfMissing", source: "http://www.aromagrowstore.com/about/" }]
+    }
+  }));
+  assert.equal(result.businessEntity.websiteAddresses[0].value, "https://www.aromagrowstore.com");
+  assert.equal(result.businessEntity.nameVariations[0].source, "https://www.aromagrowstore.com/about/");
+});
+
 test("still rejects garbled, non-URL, non-domain text in a source field", () => {
   const bad = validJson({
     company: { verticals: [{ value: "Cannabis Retail", action: "addIfMissing", source: "Aroma Grow Store opens in Niles - Illinois News Joint in-niles/" }] }
   });
-  assert.throws(() => schema.validate(bad), /must be a valid HTTPS URL, a bare domain \(e\.g\. www\.example\.com\), or null/);
+  assert.throws(() => schema.validate(bad), /must be a valid HTTPS or HTTP URL, a bare domain \(e\.g\. www\.example\.com\), or null/);
 });
 
 test("rejects unsupported action value", () => {
@@ -415,6 +450,8 @@ test("prompt includes worked examples of every real failure mode seen so far", (
   assert.match(prompt, /\[aromagrowstore\.com\]\(http:\/\/aromagrowstore\.com\/\)/);
   assert.match(prompt, /SECTION 1: Entity Details/);
   assert.match(prompt, /bare domain \(e\.g\. "example\.com"\) in any "source"/);
+  assert.match(prompt, /a bare null for the whole field/);
+  assert.match(prompt, /plain HTTP is almost never the real citation URL/);
 });
 
 test("prompt requests the full evidenced scope (sites, industries, keywords, etc.) but never a management field", () => {
