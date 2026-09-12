@@ -28,6 +28,20 @@
     return value === null || typeof value === "string";
   }
 
+  // Real observed failure: Rovo wrote the literal text "null" (a string)
+  // into an emailDefaultStructure value instead of the JSON literal null.
+  // isNullableString technically accepts it (it's a valid string), so it
+  // passed validation, then the workflow tried to match "null" against a
+  // real catalog value, found nothing, and threw `"null" is not a
+  // supported Email Default Structure value.` There's exactly one
+  // reasonable reading of the string "null" appearing where a nullable
+  // string is expected — same class of safe, unambiguous auto-repair as
+  // the bare-domain and http:// fixes elsewhere in this file.
+  function normalizeNullableString(value) {
+    if (typeof value === "string" && value.trim().toLowerCase() === "null") return null;
+    return value;
+  }
+
   function isHttpsUrl(value) {
     if (typeof value !== "string") return false;
     try {
@@ -132,7 +146,7 @@
     return text.length > 120 ? `${text.slice(0, 120)}…` : text;
   }
 
-  function checkEnvelope(record, path, errors, { valueCheck, valueLabel, requireAction = true }) {
+  function checkEnvelope(record, path, errors, { valueCheck, valueLabel, requireAction = true, valueNormalize = (v) => v }) {
     if (!isPlainObject(record)) {
       pushError(errors, path, `must be an object. Received: ${describeValue(record)}`);
       return null;
@@ -141,7 +155,7 @@
     if (!("value" in record) || !valueCheck(record.value)) {
       pushError(errors, path, `value must be ${valueLabel}. Received: ${describeValue(record.value)}`);
     } else {
-      safe.value = record.value;
+      safe.value = valueNormalize(record.value);
     }
     if (requireAction) {
       if (!isValidAction(record.action)) {
@@ -340,7 +354,7 @@
       if (key in value && !isNullableString(value[key])) {
         pushError(errors, `profileIdentity.${key}`, "must be a string or null.");
       } else {
-        safe[key] = value[key] ?? null;
+        safe[key] = normalizeNullableString(value[key] ?? null);
       }
     }
     if (!safe.companyName) {
@@ -373,7 +387,7 @@
     // propose here."
     if ("emailDefaultStructure" in value && value.emailDefaultStructure !== null) {
       safe.emailDefaultStructure = checkEnvelope(value.emailDefaultStructure, "businessEntity.emailDefaultStructure", errors, {
-        valueCheck: isNullableString, valueLabel: "a string or null"
+        valueCheck: isNullableString, valueLabel: "a string or null", valueNormalize: normalizeNullableString
       });
     }
     if ("websiteAddresses" in value) {
@@ -416,17 +430,17 @@
       safe.startDate = checkEnvelope(value.startDate, "company.startDate", errors, { valueCheck: (v) => v === null || isValidDate(v), valueLabel: "MM/DD/YYYY or null" });
     }
     if ("briefDescription" in value && value.briefDescription !== null) {
-      safe.briefDescription = checkEnvelope(value.briefDescription, "company.briefDescription", errors, { valueCheck: isNullableString, valueLabel: "a string or null" });
+      safe.briefDescription = checkEnvelope(value.briefDescription, "company.briefDescription", errors, { valueCheck: isNullableString, valueLabel: "a string or null", valueNormalize: normalizeNullableString });
     }
     if ("fullDescription" in value && value.fullDescription !== null) {
-      safe.fullDescription = checkEnvelope(value.fullDescription, "company.fullDescription", errors, { valueCheck: isNullableString, valueLabel: "a string or null" });
+      safe.fullDescription = checkEnvelope(value.fullDescription, "company.fullDescription", errors, { valueCheck: isNullableString, valueLabel: "a string or null", valueNormalize: normalizeNullableString });
     }
     if ("keywords" in value) {
       safe.keywords = checkRecordArray(value.keywords, "company.keywords", errors, keywordFields);
     }
     if ("searchKeywords" in value && value.searchKeywords !== null) {
       // A single free-text field in RTS, not a repeatable tag list like keywords.
-      safe.searchKeywords = checkEnvelope(value.searchKeywords, "company.searchKeywords", errors, { valueCheck: isNullableString, valueLabel: "a string or null" });
+      safe.searchKeywords = checkEnvelope(value.searchKeywords, "company.searchKeywords", errors, { valueCheck: isNullableString, valueLabel: "a string or null", valueNormalize: normalizeNullableString });
     }
     if ("industries" in value) {
       safe.industries = checkRecordArray(value.industries, "company.industries", errors, industryFields);
@@ -458,7 +472,14 @@
     const warnings = [];
 
     const knownTopLevel = new Set(["schemaVersion", "meta", "profileIdentity", "businessEntity", "company"]);
+    // "anc" is a content-provenance tag (accepted_used/rejected_not_used)
+    // the Rovo agent's own configuration appends on every response — real,
+    // expected, and already known to be harmless (unknown top-level keys
+    // are never a blocking error), so it's dropped silently instead of
+    // warning on every single run.
+    const silentlyIgnoredTopLevel = new Set(["anc"]);
     for (const key of Object.keys(parsed)) {
+      if (silentlyIgnoredTopLevel.has(key)) continue;
       if (!knownTopLevel.has(key)) warnings.push(`${key} is not a recognized top-level field and was ignored.`);
     }
 

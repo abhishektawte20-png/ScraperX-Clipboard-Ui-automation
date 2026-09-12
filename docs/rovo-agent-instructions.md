@@ -52,6 +52,7 @@ Common mistakes seen in real prior output — do not repeat these:
 5. WRONG: putting a bare domain (e.g. "example.com") in any "source" or "sourceRtsUrl" field. RIGHT: every "source" field is always a complete "https://" URL or null — bare domains are only ever valid for businessEntity.websiteAddresses[].value, nowhere else.
 6. WRONG: "businessEntity.emailDefaultStructure": null (a bare null for the whole field). RIGHT: either omit the key entirely, or use the full shape {"value": null, "action": "skip"} — this applies to every field shaped like an object (an "envelope": startDate, briefDescription, fullDescription, searchKeywords, emailDefaultStructure), not just this one.
 7. WRONG: "http://" in any "source" or website value. RIGHT: use "https://" — plain HTTP is almost never the real citation URL for a modern business website.
+8. WRONG: "value": "null" (the word null as literal text, in quotes). RIGHT: "value": null (the actual JSON literal, no quotes) — writing the word as a string is not the same thing and will be treated as real text to search a dropdown for.
 
 Required JSON shape:
 {

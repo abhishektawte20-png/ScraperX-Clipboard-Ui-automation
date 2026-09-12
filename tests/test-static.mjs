@@ -203,6 +203,41 @@ test("still rejects garbled, non-URL, non-domain text in a source field", () => 
   assert.throws(() => schema.validate(bad), /must be a valid HTTPS or HTTP URL, a bare domain \(e\.g\. www\.example\.com\), or null/);
 });
 
+test("normalizes a literal \"null\" string to real null in emailDefaultStructure (real observed failure)", () => {
+  // Real observed failure: Rovo wrote the STRING "null" instead of the
+  // JSON literal null. isNullableString technically accepts any string,
+  // so this used to pass validation, build a "pending" action, and then
+  // throw deep inside the workflow: '"null" is not a supported Email
+  // Default Structure value.'
+  const result = schema.validate(validJson({
+    businessEntity: { emailDefaultStructure: { value: "null", action: "addIfMissing" } }
+  }));
+  assert.equal(result.businessEntity.emailDefaultStructure.value, null);
+
+  const actions = executionPlan.buildExecutionPlan(result);
+  assert.equal(actions.some((a) => a.jsonPath === "businessEntity.emailDefaultStructure"), false, "a null value should never become a pending action");
+});
+
+test("normalizes a literal \"null\" string in briefDescription, fullDescription, searchKeywords, and profileIdentity fields too", () => {
+  const result = schema.validate(validJson({
+    profileIdentity: { companyName: "Aroma Grow Store", domain: "aromagrowstore.com", pbId: "NULL" },
+    company: {
+      briefDescription: { value: "null", action: "addIfMissing" },
+      fullDescription: { value: "Null", action: "addIfMissing" },
+      searchKeywords: { value: " null ", action: "addIfMissing" }
+    }
+  }));
+  assert.equal(result.profileIdentity.pbId, null);
+  assert.equal(result.company.briefDescription.value, null);
+  assert.equal(result.company.fullDescription.value, null);
+  assert.equal(result.company.searchKeywords.value, null);
+});
+
+test("the Rovo agent's own \"anc\" provenance key is dropped silently, not warned about", () => {
+  const result = schema.validate(validJson({ anc: { accepted_used: [], rejected_not_used: [] } }));
+  assert.equal(result.warnings.some((w) => w.includes("anc")), false);
+});
+
 test("rejects unsupported action value", () => {
   const bad = validJson({ company: { keywords: [{ value: "fintech", action: "forceReplace" }] } });
   assert.throws(() => schema.validate(bad));
@@ -452,6 +487,7 @@ test("prompt includes worked examples of every real failure mode seen so far", (
   assert.match(prompt, /bare domain \(e\.g\. "example\.com"\) in any "source"/);
   assert.match(prompt, /a bare null for the whole field/);
   assert.match(prompt, /plain HTTP is almost never the real citation URL/);
+  assert.match(prompt, /the word null as literal text, in quotes/);
 });
 
 test("prompt requests the full evidenced scope (sites, industries, keywords, etc.) but never a management field", () => {

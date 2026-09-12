@@ -45,7 +45,16 @@
     const nameInputs = Array.from(document.querySelectorAll(entry.form.nameInput.candidates[0]));
     const typeSelects = Array.from(document.querySelectorAll(entry.form.typeDropdown.candidates[0]));
     if (nameInputs.length !== typeSelects.length) {
-      throw new Error(`Name variation rows are out of sync: ${nameInputs.length} name input(s) vs ${typeSelects.length} type dropdown(s).`);
+      // Deliberately fails loudly with the raw counts rather than guessing
+      // which element is the extra/missing one — this exact mismatch (seen
+      // consistently as 0 vs 1 on profiles with no existing name
+      // variations yet) is still an open investigation; see
+      // docs/evidence-checklist.md.
+      throw new Error(
+        `Couldn't verify existing name variations on this page: found ${nameInputs.length} name field(s) but ${typeSelects.length} type dropdown(s) (they should match). ` +
+        "This has been seen when a profile has no existing name variations yet. No changes were made. " +
+        `[diagnostic: ${nameInputs.length} name input(s) vs ${typeSelects.length} type dropdown(s)]`
+      );
     }
     return nameInputs.map((input, index) => ({
       name: input.value,
